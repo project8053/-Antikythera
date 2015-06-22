@@ -78,11 +78,6 @@
             'BEAR': 2,
         };
 
-        var PARAM = {
-            'DIRECT_CALL': 1,
-            'FORM_DATA_CALLBACK': 2,
-        };
-
         var STYLE = {
             'PERCENT': parseInt('000001', 2),
             'PERMILLE': parseInt('000010', 2),
@@ -102,11 +97,7 @@
         };
 
         var SETTING = {
-            'FORM_DATA_REFRESH_INTERVAL': 45 * 60 * 1000,
-            'FORM_DATA_RETRY_INTERVAL': 5 * 1000,
             'DO_SOMETHING_RETRY_INTERVAL': 5 * 1000,
-            'REFRESH_QUOTE_INTERVAL': 15 * 1000,
-            'REFRESH_QUOTE_INIT_TIMEOUT': 5 * 60 * 1000,
             'CHECK_OPEN_RETRY_INTERVAL': 5 * 1000,
             'PRIOR_DATE_STATUS_RETRY_INTERVAL': 5 * 1000,
             'STUDIES_CALC_INTERVAL': 2 * 60 * 1000,
@@ -127,7 +118,6 @@
         var marketSpeculativeOpenTime = new Date(new Date().getFullYear(), new Date().getMonth(), new Date().getDate(), 9, 14);
         var marketCloseTime = new Date(new Date().getFullYear(), new Date().getMonth(), new Date().getDate(), 15, 30);
         var startStatePollEndTime = new Date(new Date().getFullYear(), new Date().getMonth(), new Date().getDate(), 9, 55);
-        var priorDateStatusEndTime = new Date(new Date().getFullYear(), new Date().getMonth(), new Date().getDate(), 8, 55);
         var evaluateScripsStartTime = new Date(new Date().getFullYear(), new Date().getMonth(), new Date().getDate(), 11, 0);
         var evaluateScripsEndTime = new Date(new Date().getFullYear(), new Date().getMonth(), new Date().getDate(), 14, 0);
         // 26-05-2015 - For Open Range Breakout calculation
@@ -566,118 +556,6 @@
             UpdateLayout();
         };
 
-        var deferRefreshQuote;
-        var formData;
-        var serverFailureCount = 0;
-        var maxServerFailureCount = Math.floor((SETTING.STUDIES_CALC_INTERVAL / SETTING.REFRESH_QUOTE_INTERVAL) - 1);
-        RefreshQuote = function (param) {
-            if (param == PARAM.DIRECT_CALL || formData == undefined) {
-                clearInterval(deferRefreshQuote);
-                GetFormData({ 'callee': RefreshQuote });
-                return;
-            }
-            else if (param == PARAM.FORM_DATA_CALLBACK) {
-                deferRefreshQuote = setInterval(RefreshQuote, SETTING.REFRESH_QUOTE_INTERVAL);
-            }
-
-            if (new Date() > marketCloseTime)
-                clearInterval(deferRefreshQuote);
-
-            $.ajax({
-                url: 'market-watch.aspx?ts=' + new Date().getTime(),
-                type: 'POST',
-                data: {
-                    formData: formData
-                },
-                success: function (result) {
-                    try {
-                        var now = new Date().getTime();
-
-                        if (result.error != undefined) {
-                            console.error('RefreshQuote', result.error);
-                            if (new RegExp(/\(5\d\d\)/g).test(result.error)) {
-                                // increment failure count if 5xx error detected; check is needed to differentiate from internet
-                                // failure errors
-                                serverFailureCount++;
-                                if (serverFailureCount >= maxServerFailureCount) {
-                                    console.warn('Failure count exceeded limit; refreshing formData');
-                                    GetFormData({ 'quitOnFailure': true });
-                                    serverFailureCount -= 3;
-                                }
-                            }
-                        }
-                        else {
-                            serverFailureCount = 0;
-                            for (var i = 0; i < result.data.length; i++)
-                                for (var k = 0; k < data.length; k++)
-                                    if (result.data[i].symbol == data[k].symbol) {
-                                        if (data[k].priorDate != undefined)
-                                            if (data[k].priorDate.LTP == result.data[i].LTP && data[k].priorDate.noOfTrades == result.data[i].noOfTrades)
-                                                // this entry appears to be yesterday's data; do not consider, go to next i
-                                                break;
-                                        if (data[k].BSEState != undefined)
-                                            if (result.data[i].noOfTrades <= data[k].BSEState.noOfTrades || result.data[i].LTP == data[k].BSEState.LTP)
-                                                break;
-                                        if (result.data[i].LTP != 0) {
-                                            UpdateLTP(k, result.data[i].LTP);
-                                            data[k].BSEState = {
-                                                'LTP': result.data[i].LTP,
-                                                'noOfTrades': result.data[i].noOfTrades,
-                                            };
-                                            if (document.getElementById('trades_' + k) != null)
-                                                document.getElementById('trades_' + k).innerHTML = data[k].BSEState.noOfTrades.toComma();
-                                        }
-                                        // breaks the k loop
-                                        break;
-                                    }
-                        }
-                    }
-                    catch (e) {
-                        console.error('RefreshQuote', e);
-                    }
-                },
-                error: function (HttpRequest, textStatus, errorThrown) {
-                    console.error('RefreshQuote', HttpRequest, textStatus, errorThrown);
-                    // serverFailureCount is not incremented at this point as ajax throws onError only for IIS problems;
-                    // no need to refresh formData for the same
-                }
-            });
-        };
-
-        var deferGetFormData;
-        GetFormData = function (param) {
-            $.ajax({
-                url: 'market-watch-initiate.aspx?ts=' + new Date().getTime(),
-                type: 'POST',
-                success: function (result) {
-                    if (result.error != undefined) {
-                        console.error('GetFormData', result.error);
-                        if (param == undefined || param.quitOnFailure != true) {
-                            // Output of setTimeout is not tracked as (1) small interval (2) deferGetFormData used to decide initialization of setInterval
-                            setTimeout(function () { GetFormData(param); }, SETTING.FORM_DATA_RETRY_INTERVAL);
-                        }
-                        return;
-                    }
-
-                    formData = result.formData;
-                    if (param != undefined)
-                        if (param.callee != undefined)
-                            param.callee(PARAM.FORM_DATA_CALLBACK);
-
-                    console.info('Updated formData', new Date());
-                    if (deferGetFormData == undefined)
-                        deferGetFormData = setInterval(GetFormData, SETTING.FORM_DATA_REFRESH_INTERVAL);
-                    else if (new Date() > marketCloseTime)
-                        clearInterval(deferGetFormData);
-                },
-                error: function (HttpRequest, textStatus, errorThrown) {
-                    console.error('GetFormData', HttpRequest, textStatus, errorThrown);
-                    if (param == undefined || param.quitOnFailure != true)
-                        setTimeout(function () { GetFormData(param); }, SETTING.FORM_DATA_RETRY_INTERVAL);
-                }
-            });
-        };
-
         var deferCheckIfOpen;
         var state = STATE.CLOSE;
         CheckIfOpen = function () {
@@ -696,17 +574,7 @@
                     else {
                         // Market is now open, LTP "changes" from Google can now be considered
                         state = STATE.OPEN;
-// 08-04-2015 - Commented by Sanjay
-// Too many internal server error with BSE; ignore for now
-//                      if (!priorDateStatusAvailable) {
-//                          console.warn('priorDateStatus is not available; deferring RefreshQuote');
-//                          // i.e. if we do not have yesterday's closing information, delay the request for today's quote
-//                          // this reduces the risk that a particular scrip still doesn't have the latest data
-//                          setTimeout(function () { RefreshQuote(PARAM.DIRECT_CALL); }, SETTING.REFRESH_QUOTE_INIT_TIMEOUT);
-//                      }
-//                      else
-//                          // PARAM.DIRECT_CALL indicates need to refresh formData
-//                          RefreshQuote(PARAM.DIRECT_CALL);
+
                         deferGetStartState = setTimeout(GetStartState, SETTING.CHECK_START_STATE_INIT_TIMEOUT);
                         deferCalculateRange = setInterval(CalculateRange, SETTING.STUDIES_CALC_INTERVAL);
 
@@ -770,48 +638,9 @@
                 tr[i].parentNode.appendChild(tr[i]);
         };
 
-        var priorDateStatusAvailable = false;
-        GetPriorDateStatus = function (param) {
-            if (param == PARAM.DIRECT_CALL)
-                GetFormData({ 'callee': GetPriorDateStatus });
-            else {
-                $.ajax({
-                    url: 'market-watch.aspx?ts=' + new Date().getTime(),
-                    type: 'POST',
-                    data: {
-                        formData: formData
-                    },
-                    success: function (result) {
-                        if (result.error != undefined) {
-                            console.error('GetPriorDateStatus', result.error);
-                            setTimeout(function () { GetPriorDateStatus(param); }, SETTING.PRIOR_DATE_STATUS_RETRY_INTERVAL);
-                            return;
-                        }
-
-                        priorDateStatusAvailable = true;
-                        for (var k = 0; k < data.length; k++)
-                            for (var i = 0; i < result.data.length; i++)
-                                if (data[k].symbol == result.data[i].symbol) {
-                                    data[k].priorDate = {
-                                        'LTP': result.data[i].LTP,
-                                        'noOfTrades': result.data[i].noOfTrades,
-                                    };
-                                    break;
-                                }
-                        formData = undefined;
-
-                        console.log('priorDate information is initialized');
-                    },
-                    error: function (HttpRequest, textStatus, errorThrown) {
-                        console.error('GetPriorDateStatus', HttpRequest, textStatus, errorThrown);
-                        setTimeout(function () { GetPriorDateStatus(param); }, SETTING.PRIOR_DATE_STATUS_RETRY_INTERVAL);
-                    }
-                });
-            }
-        };
-
         var google;
         BeginGoogle = function () {
+            // URL is subject to browser & OS
             google = window.open('https://www.google.com/intl/en/about/#SAFE', 'WND-GOOGLE-HOME');
         };
 
@@ -835,12 +664,6 @@
                     }
                     // Set-up the initial table layout
                     UpdateLayout();
-// During early hours, BSE might return previous day's data; hence, store it beforehand & ignore when encountered
-// If too late, delay BSE refresh till confident of this day's data
-// 08-04-2015 - Commented by Sanjay
-// Too many internal server error with BSE; ignore for now
-//                  if (new Date() < priorDateStatusEndTime)
-//                      GetPriorDateStatus(PARAM.DIRECT_CALL);
                     // In case, execution time post marketSpeculativeOpenTime, immediately executed (setTimeout doesn't recognize -ve times)
                     deferCheckIfOpen = setTimeout(CheckIfOpen, marketSpeculativeOpenTime.getTime() - new Date().getTime());
                 });
