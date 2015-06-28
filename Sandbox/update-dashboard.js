@@ -137,26 +137,49 @@ DoSomething = function () {
     div.style.bottom = '10px';
     document.body.appendChild(div);
 
-    var select = document.createElement('select');
-    select.id = 'dates';
-    select.style.margin = '5px';
-    div.appendChild(select);
+    var selectScripts = document.createElement('select');
+    selectScripts.id = 'scripts';
+    selectScripts.style.margin = '5px';
+    div.appendChild(selectScripts);
+    $.getJSON('./Sandbox/available-alternate-scripts.php', function (result) {
+        $.each(result, function () {
+            $('#scripts').append($("<option />").val(this.relativeURL).text(this.alternateScript));
+        });
+    });
+
+    var inputScripts = document.createElement('input');
+    inputScripts.type = 'button';
+    inputScripts.value = '>';
+    inputScripts.addEventListener('click', function (e) {
+        var wnd = window.open();
+        $.get($('#scripts').val(), function (result) {
+            wnd.document.write(result);
+        });
+    });
+    div.appendChild(inputScripts);
+
+    div.appendChild(document.createElement('br'));
+
+    var selectDates = document.createElement('select');
+    selectDates.id = 'dates';
+    selectDates.style.margin = '5px';
+    div.appendChild(selectDates);
     $.getJSON('./Sandbox/available-dates.php', function (result) {
         $.each(result, function () {
             $('#dates').append($("<option />").val(this.relativeURL).text(this.date));
         });
     });
 
-    var input = document.createElement('input');
-    input.type = 'button';
-    input.value = '>';
-    input.addEventListener('click', function (e) {
+    var inputDates = document.createElement('input');
+    inputDates.type = 'button';
+    inputDates.value = '>';
+    inputDates.addEventListener('click', function (e) {
         $.getJSON($('#dates').val(), function (result) {
             archive = result;
             StartSimulation();
         });
     });
-    div.appendChild(input);
+    div.appendChild(inputDates);
 };
 
 DoSomething();
