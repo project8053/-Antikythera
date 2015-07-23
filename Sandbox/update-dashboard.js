@@ -2,29 +2,13 @@
 SETTING.MIN_PRICE_ADJUSTMENT = 0.0005;
 
 var archive = [];
-
-var orders = [];
-CheckOrders = function (k, LTP) {
-    for (var i = 0; i < orders.length; i++)
-        if (!orders[i].executed)
-            if (orders[i].symbol == data[k].symbol)
-                if ((orders[i].TransactionType == TRANSACTION_TYPE.BUY && orders[i].OrderType == 'LIMIT' && LTP < orders[i].Price
-                    ) ||
-                    (orders[i].TransactionType == TRANSACTION_TYPE.SELL && orders[i].OrderType == 'LIMIT' && LTP > orders[i].Price
-                    ) ||
-                    (orders[i].TransactionType == TRANSACTION_TYPE.BUY && orders[i].OrderType == 'SL MARKET' && LTP > orders[i].TriggerPrice
-                    ) ||
-                    (orders[i].TransactionType == TRANSACTION_TYPE.SELL && orders[i].OrderType == 'SL MARKET' && LTP < orders[i].TriggerPrice
-                    )) {
-                    orders[i].executed = true;
-                }
-};
+var polledTime = new Date();
 
 var orders = [];
 CheckOrders = function (k, LTP) {
     if (orders[k] == undefined)
         return;
-
+    
     for (var i = 0; i < orders[k].pending.length;)
         if ((orders[k].pending[i].TransactionType == TRANSACTION_TYPE.BUY && orders[k].pending[i].OrderType == 'LIMIT' && LTP < orders[k].pending[i].Price
             ) ||
@@ -91,8 +75,14 @@ StartSimulation = function () {
         clearInterval(deferCalculateRange);
     dataPendingStartState = [];
 
+    var processingDate = $('#dates').val().replace('/~Antikythera/Sandbox/History/archive.', '').replace('.json', '').replace(/\./g, '-');
+    console.log('Simulation starting for ' + processingDate);
+    var rangeStartTime = new Date(processingDate + 'T03:46:00.000Z');
     var rangeIndex = 0;
+    
     var deferCalculateRange = setInterval(function () {
+        polledTime.setTime(rangeStartTime.getTime() + rangeIndex * 2 * 60 * 1000);
+
         var changed = false;
         for (var n = 0; n < archive.length; n++) {
             var k = archive[n].link;
@@ -106,20 +96,24 @@ StartSimulation = function () {
                     archive[n].link = k;
             }
 
+            var nRangeIndex = archive[n].rangeIndex == undefined ? 0 : archive[n].rangeIndex + 1;
+            if (archive[n].range[nRangeIndex] == undefined)
+                continue;
+            if (archive[n].range[nRangeIndex].asOf != polledTime.toISOString())
+                continue;
+
             if (data[k].limits.previousClosePrice == undefined)
                 if (archive[n].previousClosePrice != undefined)
                     data[k].limits.previousClosePrice = archive[n].previousClosePrice;
 
-            if (rangeIndex >= archive[n].range.length)
-                continue;
-
-            changed = true;
-
-            var range = archive[n].range[rangeIndex];
+            var range = archive[n].range[nRangeIndex];
             UpdateLTP(k, range.openPrice); CheckOrders(k, range.openPrice);
             UpdateLTP(k, range.highPrice); CheckOrders(k, range.highPrice);
             UpdateLTP(k, range.lowPrice); CheckOrders(k, range.lowPrice);
             UpdateLTP(k, range.closePrice); CheckOrders(k, range.closePrice);
+            archive[n].rangeIndex = nRangeIndex;
+
+            changed = true;
         }
         CalculateRange();
 
@@ -131,6 +125,10 @@ StartSimulation = function () {
 };
 
 DoSomething = function () {
+    // Update function definitions to respond to simulation
+    eval('CalculateRange = ' + CalculateRange.toString().replace(/new Date\(\)/g, 'new Date(polledTime.toISOString())'));
+    eval('EvaluateScrips = ' + EvaluateScrips.toString().replace(/new Date\(\)/g, 'new Date(polledTime.toISOString())'));
+
     var div = document.createElement('div');
     div.style.position = 'fixed';
     div.style.left = '10px';
