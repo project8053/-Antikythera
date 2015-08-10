@@ -6,7 +6,7 @@
   $pattern = "./Alternate/*.html";
   foreach (glob($pattern) as $filename) {
     $relativeURL = dirname($_SERVER[REQUEST_URI]) . ltrim($filename, ".");
-    $alternateScript = ucwords(str_replace("-", " ", str_replace(".html", "", basename($filename))));
+    $alternateScript = ucfirst(str_replace("-", " ", str_replace(".html", "", basename($filename))));
     array_push($output, array("relativeURL" => $relativeURL, "alternateScript" => $alternateScript));
   }
   echo json_encode($output);
