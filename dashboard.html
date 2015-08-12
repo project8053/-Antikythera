@@ -135,6 +135,10 @@
             return this.toFixed(points == undefined ? 0 : Math.min(3, points)).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
         };
 
+        String.prototype.URL = function () { 
+            return this + (this.indexOf('?') != -1 ? '&' : '?') + '_=' + new Date().getTime(); 
+        };
+
         var deferGetStartState;
         var dataPendingStartState = [];
         GetStartState = function () {

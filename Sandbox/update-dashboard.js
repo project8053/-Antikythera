@@ -8,7 +8,7 @@ CheckOrders = function (k, LTP) {
     if (orders[k] == undefined)
         return;
     
-    for (var i = 0; i < orders[k].pending.length;)
+    for (var i = 0; i < orders[k].pending.length; )
         if ((orders[k].pending[i].TransactionType == TRANSACTION_TYPE.BUY && orders[k].pending[i].OrderType == 'LIMIT' && LTP < orders[k].pending[i].Price
             ) ||
             (orders[k].pending[i].TransactionType == TRANSACTION_TYPE.SELL && orders[k].pending[i].OrderType == 'LIMIT' && LTP > orders[k].pending[i].Price
@@ -157,23 +157,63 @@ StartSimulation = function () {
         if (changed)
             rangeIndex++;
         else {
+            clearInterval(deferCalculateRange);
+
             var netValue = 0;
             for (var k = 0; k < orders.length; k++)
-                if(orders[k] != undefined)
+                if (orders[k] != undefined)
                     netValue += orders[k].executed.SELLValue - orders[k].executed.BUYValue;
             log.netValue.style.color = netValue > 0 ? 'green' : 'red';
             log.netValue.innerHTML = '₹' + netValue.toComma(2);
-            
-            clearInterval(deferCalculateRange);
+
+            log.handle.GotoNext();
         }
     }, 1 * 1000);
+};
+
+InitializeSimulation = function () {
+    var handle = window.open('', 'WND-LOG' + (window.technique != undefined ? '-' + window.technique.text.toUpperCase().replace(/ /g, '-') : ''), 'width=400, height=300');
+    if (handle.document.getElementById('log') == undefined) {
+        var logURL = './Sandbox/log-monitor.js'.URL();
+        handle.document.write('<div style="font-family: Verdana; font-size: 10px;">Next: <span id="next" style="margin-right: 5px;">-</span></div><br /><table id="log" style="font-family: Verdana; font-size: 10px;"></table><script src="' + logURL + '"></script>');
+        handle.document.title = window.technique != undefined ? window.technique.text : 'Dashboard';
+    }
+
+    var row = handle.document.getElementById('log').insertRow(-1);
+    window.log = {
+        'handle': handle,
+        'processingDate': row.insertCell(0),
+        'availableFunds': row.insertCell(1),
+        'netValue': row.insertCell(2)
+    };
+    handle.document.getElementById('next').innerHTML = $('#dates option:selected').next().text() == '' ? '-' : $('#dates option:selected').next().text();
+
+    $.getJSON($('#dates').val(), function (result) {
+        archive = result;
+        StartSimulation();
+    });
+};
+
+PrepareAlternateWindow = function (handle, _technique) {
+    $.get(_technique.val.URL(), function (result) {
+        handle.document.write(result);
+        // For easy readability; display name of selected script
+        var alternate = handle.document.createElement('span');
+        alternate.id = 'alternate';
+        alternate.style.paddingRight = '4px';
+        alternate.innerHTML = _technique.text;
+        handle.document.getElementById('header').insertBefore(alternate, handle.document.getElementById('header').firstChild);
+
+        handle.technique = _technique;
+        // DO NOT REMOVE (for use in log-monitor.js; place additional script) - $EOF$
+    });
 };
 
 /*  IMPORTANT:
     DoSomething needs to be fully compatible with all techniques
 */
 DoSomething = function () {
-    // 08-08-2015 - Moved below from StartSimulation; need not wait until start of simulation to clear intervals
+    // Clear existing intervals & pre-initialization steps
     if (window.deferCheckIfOpen != undefined)
         clearTimeout(deferCheckIfOpen);
     if (window.deferCalculateRange != undefined)
@@ -200,17 +240,10 @@ DoSomething = function () {
     inputScripts.type = 'button';
     inputScripts.value = '>';
     inputScripts.addEventListener('click', function (e) {
-        var wnd = window.open();
-        $.get($('#scripts').val() + '?ts=' + new Date().getTime(), function (result) {
-            wnd.document.write(result);
-            // 08-08-2015 - Enabled display of selected simulation
-            var alternate = wnd.document.createElement('span');
-            alternate.id = 'alternate';
-            alternate.style.paddingRight = '4px';
-            alternate.innerHTML = '[' + $('#scripts').text() + ']';
-            wnd.document.getElementById('header').insertBefore(alternate, wnd.document.getElementById('header').firstChild);
-            // 10-08-2015 - For use only in update-dashboard.js
-            wnd.technique = $('#scripts').text();
+        var handle = window.open();
+        PrepareAlternateWindow(handle, {
+            'text': $('#scripts').text(),
+            'val': $('#scripts').val()
         });
     });
     div.appendChild(inputScripts);
@@ -221,16 +254,7 @@ DoSomething = function () {
     selectDates.id = 'dates';
     selectDates.style.margin = '5px';
     div.appendChild(selectDates);
-    $.getJSON('./Sandbox/available-dates.php', function (result) {
-        result.sort(function (a, b) {
-            return a.relativeURL < b.relativeURL ? 1 : (a.relativeURL > b.relativeURL ? -1 : 0);
-        });
-        $.each(result, function () {
-            $('#dates').append($("<option />").val(this.relativeURL).text(this.date));
-        });
-    });
 
-    // 10-08-2015 - Added support for setting initial funds
     var inputFunds = document.createElement('input');
     inputFunds.type = 'text';
     inputFunds.id = 'sampleFunds';
@@ -244,24 +268,27 @@ DoSomething = function () {
     inputDates.type = 'button';
     inputDates.value = '>';
     inputDates.addEventListener('click', function (e) {
-        var wnd = window.open('', 'WND-LOG', 'width=400, height=300');
-        if (wnd.document.getElementById('log') == undefined) {
-            wnd.document.title = 'Sandbox';
-            wnd.document.body.innerHTML = '<table id="log" style="font-family: Verdana; font-size: 10px;"></table>';
-        }
-        var row = wnd.document.getElementById('log').insertRow(-1);
-        window.log = {
-            'processingDate': row.insertCell(0),
-            'availableFunds': row.insertCell(1),
-            'netValue': row.insertCell(2)
-        };
-
-        $.getJSON($('#dates').val(), function (result) {
-            archive = result;
-            StartSimulation();
-        });
+        InitializeSimulation();
     });
     div.appendChild(inputDates);
+
+    // Populating of dates is done asynchronously
+    $.getJSON('./Sandbox/available-dates.php', function (result) {
+        result.sort(function (a, b) {
+            return a.relativeURL < b.relativeURL ? 1 : (a.relativeURL > b.relativeURL ? -1 : 0);
+        });
+
+        $.each(result, function () {
+            var option = $("<option />").val(this.relativeURL).text(this.date);
+            // nextDateDue is ONLY set in log-monitor.js & holds the value of the next date to be run
+            if (window.nextDateDue != undefined && window.nextDateDue == this.date)
+                option.attr('selected', 'selected');
+            $('#dates').append(option);
+        });
+        
+        if (window.nextDateDue != undefined && window.nextDateDue != '-')
+            InitializeSimulation();
+    });
 };
 
 DoSomething();
