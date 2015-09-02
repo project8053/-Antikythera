@@ -30,7 +30,7 @@ window.addEventListener('message', function (event) {
 
 var output = document.createElement('iframe');
 output.name = 'output';
-document.body.appendChild(output);
+document.getElementById('fjfe-click-wrapper').insertBefore(output, document.getElementById('fjfe-click-wrapper').firstChild);
 
 var form = document.createElement('form');
 form.method = 'POST';
@@ -41,10 +41,19 @@ hidden.type = 'hidden';
 hidden.name = 'archive';
 form.appendChild(hidden);
 
+var beep = new Audio(PATH + 'beep.wav');
+
 var input = document.createElement('iframe');
 input.onload = function () {
-    if (input.contentWindow.location.href == 'about:blank')
+    try {
+        if (input.contentWindow.location.hostname != location.hostname)
+            return;
+    }
+    catch (e) {
+        beep.play();
+        console.error(e);
         return;
+    }
 
     var symbol = input.contentWindow.location.search.split('q=')[1].split('&')[0];
     var lines = input.contentDocument.body.innerText.split('\n');
@@ -71,7 +80,7 @@ input.onload = function () {
             thisDay = {
                 'date': current.getFullYear() + '.' + ('0' + (current.getMonth() + 1)).right(2) + '.' + ('0' + current.getDate()).right(2),
                 'symbol': symbol,
-                'range': [],
+                'range': []
             };
             if (previousClosePrice != undefined)
                 thisDay.previousClosePrice = previousClosePrice;
@@ -101,7 +110,7 @@ input.onload = function () {
             'highPrice': openPrice > parseFloat(nodes[2]) ? openPrice : parseFloat(nodes[2]),
             'lowPrice': openPrice < parseFloat(nodes[3]) ? openPrice : parseFloat(nodes[3]),
             'closePrice': parseFloat(nodes[1]),
-            'asOf': current,
+            'asOf': current
         }
         thisDay.range.push(range);
         previousClosePrice = parseFloat(nodes[1]);
@@ -116,6 +125,6 @@ input.onload = function () {
 
     index++;
 };
-document.body.appendChild(input);
+document.getElementById('fjfe-click-wrapper').insertBefore(input, document.getElementById('fjfe-click-wrapper').firstChild);
 
 ProcessArchive();

@@ -37,6 +37,7 @@ CheckOrders = function (k, LTP) {
                     'executed': {
                         'k': k,
                         'transactionType': order.TransactionType,
+                        'quantity': order.Quantity,
                         'netPrice': executedPrice
                     }
                 }
@@ -68,15 +69,18 @@ ProcessOrder = function (k, details) {
 };
 
 SquareOff = function () {
+    console.log('Square-off');
     for (var k = 0; k < orders.length; k++)
         if (orders[k] != undefined) {
             // 10-08-2015 - Check if pending orders correctly reconcile with executed orders
             var BUYQty = orders[k].executed.BUYQty, SELLQty = orders[k].executed.SELLQty;
-            for (var i = 0; i < orders[k].pending.length; i++ )
+            for (var i = 0; i < orders[k].pending.length; i++) {
+                var order = orders[k].pending[i];
                 if (order.TransactionType == TRANSACTION_TYPE.BUY)
                     BUYQty += order.Quantity;
                 else if (order.TransactionType == TRANSACTION_TYPE.SELL)
                     SELLQty += order.Quantity;
+            }
             if (BUYQty != SELLQty)
                 console.error('Pending & executed orders do not reconcile', k, JSON.stringify(orders[k]));
 

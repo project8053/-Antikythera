@@ -99,7 +99,7 @@
 
         var TRANSACTION_TYPE = {
             'BUY': 1,
-            'SELL': 2  
+            'SELL': 2
         };
 
         var SETTING = {
@@ -147,8 +147,8 @@
             return this.toFixed(points == undefined ? 0 : Math.min(3, points)).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
         };
 
-        String.prototype.URL = function () { 
-            return this + (this.indexOf('?') != -1 ? '&' : '?') + '_=' + new Date().getTime(); 
+        String.prototype.URL = function () {
+            return this + (this.indexOf('?') != -1 ? '&' : '?') + '_=' + new Date().getTime();
         };
 
         var deferGetStartState;
@@ -220,7 +220,7 @@
 
                 case CONTENT_TYPE.GOOGL_POST_LTP:
                     if (state == STATE.OPEN)
-                        // No possibility of previous close being mistaken for today's LTP as Google never posts the first LTP it encounters
+                    // No possibility of previous close being mistaken for today's LTP as Google never posts the first LTP it encounters
                         UpdateLTP(event.data.k, event.data.LTP);
                     break;
 
@@ -426,13 +426,23 @@
                                 'OrderType': 'MARKET',
                                 'Quantity': quantity
                             });
+
+                            //var triggerPrice = ema5 > focus[j].openRangeLimits.highPrice ? focus[j].openRangeLimits.lowPrice : focus[j].openRangeLimits.highPrice;
+                            var triggerPrice = ema5 > focus[j].openRangeLimits.highPrice ? Math.floor(focus[j].openRangeLimits.highPrice * (1 - 0.0025) * 20) / 20 : Math.ceil(focus[j].openRangeLimits.lowPrice * (1 + 0.0025) * 20) / 20;
+                            console.log(triggerPrice);
+                            ProcessOrder(focus[j].k, {
+                                'TransactionType': transactionType == TRANSACTION_TYPE.BUY ? TRANSACTION_TYPE.SELL : TRANSACTION_TYPE.BUY,
+                                'OrderType': 'SL MARKET',
+                                'TriggerPrice': triggerPrice,
+                                'Quantity': quantity
+                            });
                             availableSlots--;
-                            
+
                             focus[j].tradedOpenRange = true;
                         }
-                    }   
-                }    
-            }           
+                    }
+                }
+            }
         };
 
         CalculateStudies = function (k) {
@@ -451,9 +461,9 @@
             }
             else
                 data[k].studies.ma.ema5.push((data[k].studies.ma.ema5[data[k].studies.ma.ema5.length - 1] * 4 + data[k].range[data[k].range.length - 1].closePrice) / 5);
-            
-            
-            
+
+
+
 
 
             var anonFunc1 = (function () {
@@ -612,7 +622,7 @@
                 data[k].studies.stoploss.trend.push(temp.L);
             }
 
-            
+
         };
 
         var deferCalculateRange;
