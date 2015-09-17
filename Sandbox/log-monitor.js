@@ -22,7 +22,7 @@ ContinueSimulation = function () {
     parent.nextDateDue = document.getElementById('next').innerText;
 
     var script2 = parent.document.createElement('script');
-    script2.src = './Sandbox/update-dashboard.js';
+    script2.src = './Sandbox/update-dashboard.js'.URL();
     parent.document.head.appendChild(script2);
 };
 
@@ -31,7 +31,18 @@ if (parent.PrepareAlternateWindow != undefined)
     // $EOF$ is a placeholder in original function, to be replaced with call to ContinueSimulation
     eval('PrepareAlternateWindow = ' + parent.PrepareAlternateWindow.toString().replace('$EOF$', '\nContinueSimulation();'));
 
+CheckParentStatus = function () {
+    if (parent.document.readyState == 'complete')
+        ContinueSimulation();
+    else
+        setTimeout(CheckParentStatus, 1000);
+};
+
 GotoNext = function () {
+    // In case the original parent is closed, reset parent with current window.opener
+    if (parent.window == null)
+        parent = window.opener;
+
     if (nextButton.checked == false || document.getElementById('next').innerText == '-') {
         parent.alert('Simulation complete!');
         return;
@@ -42,5 +53,5 @@ GotoNext = function () {
     if (technique != undefined)
         PrepareAlternateWindow(parent, technique);
     else
-        ContinueSimulation();
+        setTimeout(CheckParentStatus, 1000);
 };

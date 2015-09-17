@@ -56,7 +56,7 @@
         }
     </style>
 </head>
-<body style="width: 2100px; font-family: Verdana; font-size: 10px">
+<body style="width:2100px">
     <script>
         var CONTENT_TYPE = {
             'GOOGL_INITIALIZE': 1,
@@ -64,19 +64,18 @@
             'GOOGL_POST_LTP': 3,
             'RELGR_INITIALIZE': 4,
             'RELGR_PROCESS_ORDER': 5,
-            'RELGR_ORDER_STATUS_UPDATE': 6,
-            'RELGR_SQUARE_OFF': 7
+            'RELGR_ORDER_EXECUTED': 6,
         };
 
         var STATE = {
             'OPEN': 1,
-            'CLOSE': 0
+            'CLOSE': 0,
         };
 
         var TREND = {
             'NONE': 0,
             'BULL': 1,
-            'BEAR': 2
+            'BEAR': 2,
         };
 
         var STYLE = {
@@ -85,7 +84,7 @@
             'DEGREE': parseInt('000100', 2),
             'REDUCED': parseInt('001000', 2),
             'GRAY': parseInt('010000', 2),
-            'COMMA': parseInt('100000', 2)
+            'COMMA': parseInt('100000', 2),
         };
 
         var SORT = {
@@ -94,12 +93,7 @@
             'NO_OF_TRADES': 3,
             'C2O_CHANGE': 4,
             'TREND_STRENGTH': 5,
-            'SLOPE_ANGLE': 6
-        };
-
-        var TRANSACTION_TYPE = {
-            'BUY': 1,
-            'SELL': 2
+            'SLOPE_ANGLE': 6,
         };
 
         var SETTING = {
@@ -117,12 +111,8 @@
             'EVAL_MAX_SLOPE_ANGLE': Math.PI / 4,
             'EVAL_MIN_SLOPE_ANGLE': Math.PI / 8,
             'EVAL_MAX_SLOPE_DEVIATION': 0.004,
-            // 07-08-2015 - For Open Range Breakout calculation
             'MIN_LTP_CONSIDERED': 83.33,
             'MAX_LTP_CONSIDERED': 2083.33,
-            'MAX_FOCUS_CONSIDERED': 10,
-            // 09-08-2015 - Available slots
-            'MAX_SLOTS': 21
         };
 
         var marketSpeculativeOpenTime = new Date(new Date().getFullYear(), new Date().getMonth(), new Date().getDate(), 9, 14);
@@ -132,10 +122,6 @@
         var evaluateScripsEndTime = new Date(new Date().getFullYear(), new Date().getMonth(), new Date().getDate(), 14, 0);
         // 26-05-2015 - For Open Range Breakout calculation
         var openRangeCalculateTime = new Date(new Date().getFullYear(), new Date().getMonth(), new Date().getDate(), 10, 30);
-        // 10-08-2015 - For squaring off open orders
-        var squareOffTime = new Date(new Date().getFullYear(), new Date().getMonth(), new Date().getDate(), 15, 0);
-
-        var rangeStableTime = new Date(new Date().getFullYear(), new Date().getMonth(), new Date().getDate(), 9, 30);
 
         Number.prototype.toStyle = function (style, points) {
             var fontSize = style & STYLE.REDUCED ? ';font-size: 9px' : '';
@@ -149,8 +135,8 @@
             return this.toFixed(points == undefined ? 0 : Math.min(3, points)).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
         };
 
-        String.prototype.URL = function () {
-            return this + (this.indexOf('?') != -1 ? '&' : '?') + '_=' + new Date().getTime();
+        String.prototype.URL = function () { 
+            return this + (this.indexOf('?') != -1 ? '&' : '?') + '_=' + new Date().getTime(); 
         };
 
         var deferGetStartState;
@@ -159,7 +145,7 @@
             if (dataPendingStartState.length > 0) {
                 var k = dataPendingStartState.shift();
                 $.ajax({
-                    url: ('scrip-highlights.php?symbol=' + data[k].symbol).URL(),
+                    url: 'scrip-highlights.php?symbol=' + data[k].symbol + '&ts=' + new Date().getTime(),
                     type: 'POST',
                     success: function (result) {
                         if (result.error != undefined) {
@@ -187,22 +173,6 @@
                 deferGetStartState = setTimeout(GetStartState, SETTING.CHECK_START_STATE_INTERVAL);
         };
 
-        var availableFunds = 0, perSlotBudget = 0, availableSlots = SETTING.MAX_SLOTS;
-        UpdateAvailableFunds = function (_availableFunds) {
-            availableFunds = _availableFunds;
-            perSlotBudget = availableFunds / SETTING.MAX_SLOTS;
-            var msg = '+ Available funds: ₹' + availableFunds.toComma(2) + ' (per Scrip: ₹' + perSlotBudget.toComma(2) + ')';
-            if (document.getElementById('funds') != null)
-                document.getElementById('funds').innerHTML = msg;
-            else {
-                var funds = document.createElement('span');
-                funds.id = 'funds';
-                funds.style.paddingRight = '4px';
-                funds.innerHTML = msg;
-                document.getElementById('header').appendChild(funds);
-            }
-        };
-
         var connected = false;
         // connected to religare window
         ProcessMessage = function (event) {
@@ -213,7 +183,7 @@
                         symbol.push(data[k].symbol);
                     google.postMessage({
                         'type': CONTENT_TYPE.GOOGL_SETUP_DATA,
-                        'symbol': symbol
+                        'symbol': symbol,
                     }, '*');
                     var td = document.getElementById('state_google');
                     td.style.color = '#093';
@@ -222,7 +192,7 @@
 
                 case CONTENT_TYPE.GOOGL_POST_LTP:
                     if (state == STATE.OPEN)
-                    // No possibility of previous close being mistaken for today's LTP as Google never posts the first LTP it encounters
+                        // No possibility of previous close being mistaken for today's LTP as Google never posts the first LTP it encounters
                         UpdateLTP(event.data.k, event.data.LTP);
                     break;
 
@@ -232,16 +202,9 @@
                     var td = document.getElementById('state_religare');
                     td.style.color = '#093';
                     td.innerHTML = 'ON';
-                    // 08-08-2015 - Update global fund data; if not availble, display message
-                    if (event.data.funds != 0)
-                        UpdateAvailableFunds(event.data.funds);
-                    else
-                        alert('Funds information not available.\nExecute ‘UpdateAvailableFunds(₹...)’ manually.');
                     break;
 
-                case CONTENT_TYPE.RELGR_ORDER_STATUS_UPDATE:
-                    // details includes total executed summary at point of time + details of last executed order(s) 
-                    TrackOrdersStatus(event.data.k, event.data.details);
+                case CONTENT_TYPE.RELGR_ORDER_EXECUTED:
                     break;
             }
         };
@@ -256,7 +219,7 @@
 
                 religare.postMessage({
                     'type': CONTENT_TYPE.RELGR_PROCESS_ORDER,
-                    'details': details
+                    'details': details,
                 }, '*');
             }
         };
@@ -327,18 +290,6 @@
                     context.strokeStyle = 'blue';
                     context.stroke();
 
-                    context.beginPath();
-                    for (var i = 0; i < data[k].studies.ma.ema5.length; i++) {
-                        var y = canvas.height * (highPrice - data[k].studies.ma.ema5[i]) / (highPrice - lowPrice);
-                        if (i == 0)
-                            context.moveTo(i + 0.5, y);
-                        else
-                            context.lineTo(i + 0.5, y);
-                    }
-                    context.setLineDash([0]);
-                    context.strokeStyle = 'red';
-                    context.stroke();
-
                     if (data[k].studies.regression.angle.length > 0) {
                         document.getElementById('angle_' + k).innerHTML = (data[k].studies.regression.angle[data[k].studies.regression.angle.length - 1] * 180 / Math.PI).toStyle(STYLE.DEGREE) + '<br>' + data[k].studies.regression.deviation[data[k].studies.regression.angle.length - 1].toStyle(STYLE.PERMILLE | STYLE.REDUCED | STYLE.GRAY);
                     }
@@ -357,46 +308,16 @@
                             context.setLineDash([0]);
                             context.strokeStyle = 'red';
                             context.stroke();
-
-                            var canvas2 = document.getElementById('slope_' + k);
-                            var context2 = canvas2.getContext('2d');
-                            context2.beginPath();
-                            for (var i = 0; i < data[k].studies.regression.angle.length; i++) {
-
-                            }
-                            context2.stroke();
                         }
                     }
 
-                    // Show executed buy & sell operations
                     context.beginPath();
-                    if (data[k].trades != undefined && data[k].trades.all.length > 0)
-                        for (var i = 0; i < data[k].trades.all.length; i++) {
-                            var x = data[k].trades.all[i].atPos;
-                            var y = canvas.height * (highPrice - data[k].trades.all[i].executedPrice) / (highPrice - lowPrice);
-                            var img = document.getElementById(data[k].trades.all[i].transactionType == TRANSACTION_TYPE.BUY ? 'buy' : 'sell');
-                            context.drawImage(img, x - (img.scrollWidth / 2) + 0.5, y - (img.scrollHeight / 2));
+                    for (var i = 0; i < data[k].range.length; i++)
+                        if (data[k].range[i].traded) {
+                            var y = canvas.height * (highPrice - data[k].range[i].closePrice) / (highPrice - lowPrice);
+                            var star = document.getElementById('star');
+                            context.drawImage(star, i - (star.scrollWidth / 2) + 0.5, y - (star.scrollHeight / 2));
                         }
-
-                    // Show PSAR
-                    context.beginPath();
-                    context.setLineDash([3, 2]);
-                    context.strokeStyle = 'black';
-                    var trend = data[k].studies.stoploss.trend[0];
-                    for (var i = 0; i < data[k].studies.stoploss.price.length; i++) {
-                        var y = canvas.height * (highPrice - data[k].studies.stoploss.price[i]) / (highPrice - lowPrice);
-                        if (trend != data[k].studies.stoploss.trend[i]) {
-                            context.stroke();
-                            context.beginPath();
-                            context.moveTo(i + 0.5, y);
-                            trend = data[k].studies.stoploss.trend[i];
-                        }
-                        else if (i == 0)
-                            context.moveTo(i + 0.5, y);
-                        else
-                            context.lineTo(i + 0.5, y);
-                    }
-                    context.stroke();
                 }
             }
             catch (e) {
@@ -404,217 +325,51 @@
             }
         };
 
-        // 10-08-2015 - For squaring off open orders
-        var squareOff = false;
-        SquareOff = function () {
-            if (!connected)
-                console.error('Religare is offline');
-            else
-                religare.postMessage({ 'type': CONTENT_TYPE.RELGR_SQUARE_OFF }, '*');
-            squareOff = true;
-        };
-
-        TrackOrdersStatus = function (k, details) {
-            console.log(k, details);
-            if (details.lastExecuted != undefined && details.lastExecuted.length != 0) {
-                if (data[k].trades == undefined)
-                    data[k].trades = {
-                        'BUYQty': 0,
-                        'SELLQty': 0,
-                        'all': []
-                    };
-
-                data[k].trades.BUYQty = details.summary.BUYQty;
-                data[k].trades.SELLQty = details.summary.SELLQty;
-
-                for (var i = 0; i < details.lastExecuted.length; i++) {
-                    if (data[k].trades.BUYQty != data[k].trades.SELLQty)
-                    // lastExecuted is available only if there is a mis-balance of BUY & SELL
-                        data[k].trades.lastExecuted = {
-                            'transactionType': details.lastExecuted[i].transactionType,
-                            'executedPrice': details.lastExecuted[i].executedPrice,
-                            'quantity': details.lastExecuted[i].quantity
-                        };
-                    else
-                        delete data[k].trades.lastExecuted;
-
-                    // For use in displaying trades in canvas + error checking
-                    data[k].trades.all.push({
-                        'transactionType': details.lastExecuted[i].transactionType,
-                        'executedPrice': details.lastExecuted[i].executedPrice,
-                        'atPos': data[k].range.length
-                    });
-                }
-            }
-            console.log(JSON.stringify(data[k].trades));
-        };
-
         var evaluateScrips = false;
+        var availableSlots = 10;
+        var perSlotBudget = 3000;
         // 26-05-2015 - For Open Range Breakout calculation
         var isOpenRangeCalculated = false;
-        var focus = [];
         EvaluateScrips = function () {
-            if (new Date() >= squareOffTime) {
-                if (!squareOff)
-                    SquareOff();
-                return;
-            }
-
-            // TEMPORARY FIX to prevent evaluation of open range
-            //isOpenRangeCalculated = true;
-
             if (new Date() >= openRangeCalculateTime && !isOpenRangeCalculated) {
                 for (var k = 0; k < data.length; k++)
                     data[k].openRangeLimits = {
                         'highPrice': data[k].limits.highPrice,
-                        'lowPrice': data[k].limits.lowPrice
+                        'lowPrice': data[k].limits.lowPrice,
                     };
 
                 isOpenRangeCalculated = true;
+            }
 
-                focus = data.filter(function (o) {
-                    return o.openRangeLimits.highPrice < SETTING.MAX_LTP_CONSIDERED && o.openRangeLimits.lowPrice > SETTING.MIN_LTP_CONSIDERED;
-                });
+            if (isOpenRangeCalculated) {
+                var focus = [];
+                for (var k = 0; k < data.length; k++)
+                    if (!data[k].tradedOpenRange)
+                        if (data[k].studies.ema5 > data[k].openRangeLimits.highPrice || data[k].studies.ema5 < data[k].openRangeLimits.lowPrice)
+                            focus.push(data[k]);
+
                 focus.sort(function (a, b) {
-                    var a = Math.max((a.openRangeLimits.highPrice - a.limits.openPrice) / a.limits.openPrice, (a.limits.openPrice - a.openRangeLimits.lowPrice) / a.limits.openPrice);
-                    var b = Math.max((b.openRangeLimits.highPrice - b.limits.openPrice) / b.limits.openPrice, (b.limits.openPrice - b.openRangeLimits.lowPrice) / b.limits.openPrice);
-                    return b - a;
                 });
-                focus.splice(SETTING.MAX_FOCUS_CONSIDERED * 3, focus.length - SETTING.MAX_FOCUS_CONSIDERED * 3);
-                focus = focus.slice(SETTING.MAX_FOCUS_CONSIDERED);
-            }
 
-            if (focus.length != 0) {
                 for (var j = 0; j < focus.length; j++) {
-                    if (!focus[j].tradedOpenRange && availableSlots > 0) {
-                        var ema5 = focus[j].studies.ma.ema5[focus[j].studies.ma.ema5.length - 1];
-                        if (ema5 > focus[j].openRangeLimits.highPrice || ema5 < focus[j].openRangeLimits.lowPrice) {
-                            // BUY (1) when ema5 rises above previous high; else SELL (2)
-                            var transactionType = ema5 > focus[j].openRangeLimits.highPrice ? TRANSACTION_TYPE.BUY : TRANSACTION_TYPE.SELL;
-                            var quantity = Math.floor(perSlotBudget / focus[j].LTP[focus[j].LTP.length - 1]);
-
-                            ProcessOrder(focus[j].k, {
-                                'TransactionType': transactionType,
-                                'OrderType': 'MARKET',
-                                'Quantity': quantity
-                            });
-
-                            //var triggerPrice = ema5 > focus[j].openRangeLimits.highPrice ? focus[j].openRangeLimits.lowPrice : focus[j].openRangeLimits.highPrice;
-                            var triggerPrice = ema5 > focus[j].openRangeLimits.highPrice ? Math.floor(focus[j].openRangeLimits.highPrice * (1 - 0.0025) * 20) / 20 : Math.ceil(focus[j].openRangeLimits.lowPrice * (1 + 0.0025) * 20) / 20;
-                            ProcessOrder(focus[j].k, {
-                                'TransactionType': transactionType == TRANSACTION_TYPE.BUY ? TRANSACTION_TYPE.SELL : TRANSACTION_TYPE.BUY,
-                                'OrderType': 'SL MARKET',
-                                'TriggerPrice': triggerPrice,
-                                'Quantity': quantity
-                            });
-                            availableSlots--;
-
-                            focus[j].tradedOpenRange = true;
-                        }
-                    }
+                    if (availableSlots <= 0)
+                        break;
+                    // Place order for focus element
+                    var LTP = focus[j].LTP[focus[j].LTP.length - 1];
+                    var quantity = Math.floor(perSlotBudget / LTP);
+                    if (quantity == 0 || LTP < SETTING.MIN_LTP_CONSIDERED)
+                        continue;
+                    ProcessOrder(focus[j].k, {
+                        'TransactionType': 1,
+                        'OrderType': 'MARKET',
+                        'Quantity': quantity,
+                    });
+                    availableSlots--;
                 }
-            }
-
-            var k = 0;
-            while (availableSlots > 0) {
-                if (data[k].trades != undefined)
-                    if (data[k].trades.lastExecuted != undefined) {
-                        var ema = data[k].studies.ma.ema5[data[k].studies.ma.ema5.length - 1];
-                        var quantity = data[k].trades.lastExecuted.quantity;
-                        var stoplossQuantity = Math.abs(data[k].trades.BUYQty - data[k].trades.SELLQty) + quantity;
-                        var triggerPrice = 0;
-                        for (var i = 0; i < data[k].trades.all.length; i++)
-                            triggerPrice += data[k].trades.all[i].executedPrice;
-                        triggerPrice /= data[k].trades.all.length;
-
-                        switch (data[k].trades.lastExecuted.transactionType) {
-                            case TRANSACTION_TYPE.BUY:
-                                if (ema > data[k].trades.lastExecuted.executedPrice * (1 + 0.0033)) {
-                                    ProcessOrder(k, {
-                                        'TransactionType': TRANSACTION_TYPE.BUY,
-                                        'OrderType': 'MARKET',
-                                        'Quantity': quantity
-                                    });
-
-                                    triggerPrice = triggerPrice * (1 - 0.0067);
-                                    ProcessOrder(k, {
-                                        'TransactionType': TRANSACTION_TYPE.SELL,
-                                        'OrderType': 'SL MARKET',
-                                        'TriggerPrice': triggerPrice,
-                                        'Quantity': stoplossQuantity
-                                    });
-
-                                    console.log(k, 'BUY', quantity, data[k].trades.lastExecuted.executedPrice, ema, triggerPrice, stoplossQuantity);
-                                    availableSlots--;
-                                    delete data[k].trades.lastExecuted;
-                                }
-                                break;
-                            case TRANSACTION_TYPE.SELL:
-                                if (ema < data[k].trades.lastExecuted.executedPrice * (1 - 0.0033)) {
-                                    ProcessOrder(k, {
-                                        'TransactionType': TRANSACTION_TYPE.SELL,
-                                        'OrderType': 'MARKET',
-                                        'Quantity': quantity
-                                    });
-
-                                    triggerPrice = triggerPrice * (1 + 0.0067);
-                                    ProcessOrder(k, {
-                                        'TransactionType': TRANSACTION_TYPE.BUY,
-                                        'OrderType': 'SL MARKET',
-                                        'TriggerPrice': triggerPrice,
-                                        'Quantity': stoplossQuantity
-                                    });
-
-                                    console.log(k, 'SELL', quantity, data[k].trades.lastExecuted.executedPrice, ema, triggerPrice, stoplossQuantity);
-                                    availableSlots--;
-                                    data[k].trades.lastExecuted;
-                                }
-                                break;
-                        }
-                    }
-                k++;
-                if (k >= data.length)
-                    break;
             }
         };
 
         CalculateStudies = function (k) {
-
-            if (data[k].studies.ma == undefined)
-                data[k].studies.ma = {
-                    'ema5': [],
-                    'ema5High': [],
-                    'ema5Low': [],
-                    'temp': {
-                        'total5': 0,
-                        'total5High': 0,
-                        'total5Low': 0
-                    }
-                };
-
-            if (data[k].range.length <= 5) {
-                data[k].studies.ma.temp.total5 += data[k].range[data[k].range.length - 1].closePrice;
-                data[k].studies.ma.ema5.push(data[k].studies.ma.temp.total5 / data[k].range.length);
-
-                data[k].studies.ma.temp.total5High += data[k].range[data[k].range.length - 1].highPrice;
-                data[k].studies.ma.ema5High.push(data[k].studies.ma.temp.total5High / data[k].range.length);
-
-                data[k].studies.ma.temp.total5Low += data[k].range[data[k].range.length - 1].lowPrice;
-                data[k].studies.ma.ema5Low.push(data[k].studies.ma.temp.total5Low / data[k].range.length);
-            }
-            else {
-                data[k].studies.ma.ema5.push((data[k].studies.ma.ema5[data[k].studies.ma.ema5.length - 1] * 4 + data[k].range[data[k].range.length - 1].closePrice) / 5);
-                data[k].studies.ma.ema5High.push((data[k].studies.ma.ema5High[data[k].studies.ma.ema5High.length - 1] * 4 + data[k].range[data[k].range.length - 1].highPrice) / 5);
-                data[k].studies.ma.ema5Low.push((data[k].studies.ma.ema5Low[data[k].studies.ma.ema5Low.length - 1] * 4 + data[k].range[data[k].range.length - 1].lowPrice) / 5);
-            }
-
-            if (new Date() >= rangeStableTime && data[k].studies.focus == undefined) {
-                data[k].studies.focus = {
-                    'price': 1
-                };
-            }
-
-
             var anonFunc1 = (function () {
                 data[k].studies.trend = [];
                 var step1Count = 1, step2Count = 1;
@@ -669,7 +424,7 @@
                             data[k].studies.trend.push({
                                 'ADX': nDX,
                                 '+DI': nDIu,
-                                '-DI': nDId
+                                '-DI': nDId,
                             });
                         }
                         step2Count++;
@@ -693,8 +448,8 @@
                         'x': 0,
                         'y': 0,
                         'xy': 0,
-                        'xx': 0
-                    }
+                        'xx': 0,
+                    },
                 };
 
             var x = data[k].studies.regression.temp.x += index;
@@ -736,8 +491,8 @@
                         'H': data[k].range[0].highPrice,
                         'I': data[k].range[0].highPrice - data[k].range[0].lowPrice,
                         'J': SETTING.PSAR_INCR_ACC_FACTOR,
-                        'K': SETTING.PSAR_INCR_ACC_FACTOR * (data[k].range[0].highPrice - data[k].range[0].lowPrice)
-                    }
+                        'K': SETTING.PSAR_INCR_ACC_FACTOR * (data[k].range[0].highPrice - data[k].range[0].lowPrice),
+                    },
                 };
 
             if (index != 1) {
@@ -809,7 +564,7 @@
         var state = STATE.CLOSE;
         CheckIfOpen = function () {
             $.ajax({
-                url: 'check-market-open.php'.URL(),
+                url: 'check-market-open.php?ts=' + new Date().getTime(),
                 type: 'POST',
                 success: function (result) {
                     if (result.error != undefined) {
@@ -932,59 +687,58 @@
         DoSomething();
     </script>
 
-    <div id="header" style="padding-right: 8px"></div>
+    <span style="font-family:Verdana;">
+        <img id="star" src="star.png" /> indicates executed trade
+    </span>
 
-    <div style="position: absolute; display: block; right: 0px;">
-        <table style="padding-right: 8px;">
+    <div style="position:absolute;display:block;font-size:10px;font-family:Verdana;right:0px;">
+        <table style="padding-right:8px;">
             <tr>
-                <td class="no-border" style="text-align: right">
+                <td class="no-border" style="text-align:right">
                     <a href="javascript:BeginGoogle()">
                         Google:&nbsp;
                     </a>
                 </td>
-                <td id="state_google" class="no-border" style="color: #D14836;">
+                <td id="state_google" class="no-border" style="color:#D14836;">
                     OFF
                 </td>
             </tr>
             <tr>
-                <td class="no-border" style="text-align: right">
+                <td class="no-border" style="text-align:right">
                     <a href="javascript:BeginReligare()">
                         Religare:&nbsp;
                     </a>
                 </td>
-                <td id="state_religare" class="no-border" style="color: #D14836;">
+                <td id="state_religare" class="no-border" style="color:#D14836;">
                     OFF
                 </td>
             </tr>
         </table>
     </div>
 
-    <div style="float: left; padding-right: 8px">
-        <table style="border-color: black; border-top: 1px solid #C8EFEA; border-left: 1px solid #C8EFEA; margin: 0px; padding: 0px" border="0" cellspacing="0" cellpadding="2">
+    <div style="float:left;padding-right:8px">
+        <table style="font-size:10px;font-family:Verdana;border-color:black;border-top:1px solid #C8EFEA;border-left:1px solid #C8EFEA;margin:0px;padding:0px" border="0" cellspacing="0" cellpadding="2">
             <thead>
                 <tr>
-                    <th id="scrip_top" class="sort" style="width: 90px;" rowspan="2">Scrip</th>
-                    <th id="ltp_top" class="sort" style="width: 55px;">LTP<br />%Chg</th>
-                    <th style="width: 200px;">Chart</th>
-                    <th id="trades_top" class="sort" style="width: 55px;">No. of<br />trades</th>
-                    <th id="ohlc_top" class="sort" style="width: 55px;">C to O<br />H to L</th>
-                    <th style="width: 200px;">Trend</th>
-                    <th id="adx_top" class="sort" style="width: 85px;">ADX<br />+DI / -DI</th>
-                    <th style="width: 200px;">Slope</th>
-                    <th id="angle_top" class="sort" style="width: 55px;">&theta;<br />&sigma;</th>
+                    <th id="scrip_top" class="sort" style="width:90px;" rowspan="2">Scrip</th>
+                    <th id="ltp_top" class="sort" style="width:55px;">LTP<br />%Chg</th>
+                    <th style="width:200px;">Chart</th>
+                    <th id="trades_top" class="sort" style="width:55px;">No. of<br />trades</th>
+                    <th id="ohlc_top" class="sort" style="width:55px;">C to O<br />H to L</th>
+                    <th style="width:200px;">Trend</th>
+                    <th id="adx_top" class="sort" style="width:85px;">ADX<br />+DI / -DI</th>
+                    <th style="width:200px;">Slope</th>
+                    <th id="angle_top" class="sort" style="width:55px;">&theta;<br />&sigma;</th>
                 </tr>
             </thead>
-            <tbody id="quote_container" style="text-align: right">
+            <tbody id="quote_container" style="text-align:right">
                 <tr id="quote_no_rows">
-                    <td colspan="9" style="text-align: center">
+                    <td colspan="9" style="text-align:center">
                         -
                     </td>
                 </tr>
             </tbody>
         </table>
-        <div>
-            <img src="buy.png" id="buy" alt="buy" style="vertical-align:middle"> &amp; <img src="sell.png" id="sell" alt="sell" style="vertical-align:middle"> indicate buy &amp; sell trades resp.              
-        </div>
     </div>
 
     <script>

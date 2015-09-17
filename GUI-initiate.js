@@ -5,15 +5,15 @@ var parent = window.opener;
 var CONTENT_TYPE = {
     'GOOGL_INITIALIZE': 1,
     'GOOGL_SETUP_DATA': 2,
-    'GOOGL_POST_LTP': 3,
+    'GOOGL_POST_LTP': 3
 };
 
 var SETTING = {
     'SPAN_CHECK_TIMEOUT': 5 * 1000,
     'TRACK_LTP_INTERVAL': 2 * 1000,
     'STUDIES_CALC_INTERVAL': 2 * 60 * 1000,
-    'REFRESH_ORDER_INTERVAL': 45 * 1000,
-    'WAIT_DOCUMENT_INTERVAL': 1 * 1000,
+    'REFRESH_ORDER_INTERVAL': 90 * 1000,
+    'WAIT_DOCUMENT_INTERVAL': 1 * 1000
 };
 
 GetSpan = function () {
@@ -53,7 +53,7 @@ TrackLTP = function () {
                 parent.postMessage({
                     'type': CONTENT_TYPE.GOOGL_POST_LTP,
                     'k': k,
-                    'LTP': LTP,
+                    'LTP': LTP
                 }, '*');
             }
     }
@@ -78,23 +78,33 @@ RefreshOrderBook = function () {
 };
 
 WaitPlaceOrderReady = function () {
-    if (placeOrder.document.readyState == 'complete') {
-        var script = document.createElement('script');
-        script.src = PATH + 'religare-place-order.js?ts=' + new Date().getTime();
-        placeOrder.document.head.appendChild(script);
+    try {
+        if (placeOrder.document.readyState == 'complete') {
+            var script = document.createElement('script');
+            script.src = PATH + 'religare-place-order.js?ts=' + new Date().getTime();
+            placeOrder.document.head.appendChild(script);
+        }
+        else
+            setTimeout(WaitPlaceOrderReady, SETTING.WAIT_DOCUMENT_INTERVAL);    
     }
-    else
+    catch (e) {
         setTimeout(WaitPlaceOrderReady, SETTING.WAIT_DOCUMENT_INTERVAL);
+    }    
 };
 
 WaitPositionReady = function () {
-    if (position.document.readyState == 'complete') {
-        var script = document.createElement('script');
-        script.src = PATH + 'religare-position.js?ts=' + new Date().getTime();
-        position.document.head.appendChild(script);
+    try {
+        if (position.document.readyState == 'complete') {
+            var script = document.createElement('script');
+            script.src = PATH + 'religare-position.js?ts=' + new Date().getTime();
+            position.document.head.appendChild(script);
+        }
+        else
+            setTimeout(WaitPositionReady, SETTING.WAIT_DOCUMENT_INTERVAL);    
     }
-    else
+    catch (e) {
         setTimeout(WaitPositionReady, SETTING.WAIT_DOCUMENT_INTERVAL);
+    }
 };
 
 ProcessReligareRequest = function (opt) {
@@ -122,7 +132,7 @@ ProcessMessage = function (event) {
             window.dataPendingSpan = [];
             for (var k = 0; k < event.data.symbol.length; k++) {
                 data.push({
-                    'symbol': event.data.symbol[k],
+                    'symbol': event.data.symbol[k]
                 });
                 dataPendingSpan.push(k);
             }
@@ -152,17 +162,17 @@ InitiateReligare = function () {
 
     window.OPTION = {
         'PLACE_ORDER': 1,
-        'POSITIONS': 2,
+        'POSITIONS': 2
     };
 
     try {
-        var placeOrder = document.getElementById('CtrlTradingTopNavigation_hypPlaceOrder');
-        placeOrder.href = 'javascript:ProcessReligareRequest(OPTION.PLACE_ORDER);';
-        placeOrder.style.color = '#25B3A2';
+        var item1 = document.getElementById('CtrlTradingTopNavigation_hypPlaceOrder');
+        item1.href = 'javascript:ProcessReligareRequest(OPTION.PLACE_ORDER);';
+        item1.parentNode.innerHTML += '<img class=" mR5" src="' + PATH + 'new.png" style="float: left; display: block; margin-top: 12px; margin-left: -2px;">';
 
-        var positions = document.getElementById('CtrlTradingTopNavigation_hypPositions');
-        positions.href = 'javascript:ProcessReligareRequest(OPTION.POSITIONS);';
-        positions.style.color = '#25B3A2';
+        var item2 = document.getElementById('CtrlTradingTopNavigation_hypPositions');
+        item2.href = 'javascript:ProcessReligareRequest(OPTION.POSITIONS);';
+        item2.parentNode.innerHTML += '<img class=" mR5" src="' + PATH + 'new.png" style="float: left; display: block; margin-top: 12px; margin-left: -2px;">';
     }
     catch (err) {
         console.error(err, 'Possible premature execution; wait until fully loaded');

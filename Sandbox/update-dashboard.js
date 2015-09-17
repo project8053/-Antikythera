@@ -7,7 +7,9 @@ var orders = [];
 CheckOrders = function (k, LTP) {
     if (orders[k] == undefined)
         return;
-    
+
+    var changed = false;
+    var executedOrders = [];
     for (var i = 0; i < orders[k].pending.length; )
         if ((orders[k].pending[i].TransactionType == TRANSACTION_TYPE.BUY && orders[k].pending[i].OrderType == 'LIMIT' && LTP < orders[k].pending[i].Price
             ) ||
@@ -19,6 +21,9 @@ CheckOrders = function (k, LTP) {
             ) ||
             (orders[k].pending[i].OrderType == 'MARKET'
             )) {
+            // Indicates order status of one or more orders has changed (i.e. fully executed; partial execution is beyond scope of backtest)
+            changed = true;
+
             var order = orders[k].pending.splice(i, 1)[0];
             var executedPrice;
             if (order.TransactionType == TRANSACTION_TYPE.BUY) {
@@ -31,20 +36,22 @@ CheckOrders = function (k, LTP) {
                 executedPrice = order.OrderType == 'LIMIT' ? order.Price : LTP * (1 - Math.random() * (SETTING.MAX_PRICE_ADJUSTMENT - SETTING.MIN_PRICE_ADJUSTMENT) + SETTING.MIN_PRICE_ADJUSTMENT);
                 orders[k].executed.SELLValue += order.Quantity * executedPrice;
             }
-            ProcessMessage({
-                'data': {
-                    'type': CONTENT_TYPE.RELGR_ORDER_EXECUTED,
-                    'executed': {
-                        'k': k,
-                        'transactionType': order.TransactionType,
-                        'quantity': order.Quantity,
-                        'netPrice': executedPrice
-                    }
-                }
+            executedOrders.push({
+                'transactionType': order.TransactionType,
+                'quantity': order.Quantity,
+                'executedPrice': executedPrice
             });
         }
         else
             i++;
+
+    if (changed)
+    // In actual usage, message is posted (type: CONTENT_TYPE.RELGR_ORDER_STATUS_UPDATE) on order status update, which in turn calls calls TrackOrdersStatus
+    // In backtest, TrackOrdersStatus is directly called to avoid any asynchronous calls
+        TrackOrdersStatus(k, {
+            'summary': orders[k].executed, 
+            'lastExecuted': executedOrders
+        });
 };
 
 ProcessOrder = function (k, details) {
@@ -58,9 +65,9 @@ ProcessOrder = function (k, details) {
             },
             'pending': []
         };
-
+    
     if (details.OrderType == 'SL MARKET')
-        for (var i = 0; i < orders[k].pending; )
+        for (var i = 0; i < orders[k].pending.length; )
             if (orders[k].pending[i].OrderType == 'SL MARKET')
                 orders[k].pending.splice(i, 1);
             else
@@ -69,7 +76,7 @@ ProcessOrder = function (k, details) {
 };
 
 SquareOff = function () {
-    console.log('Square-off');
+    console.log('Square-off triggered');
     for (var k = 0; k < orders.length; k++)
         if (orders[k] != undefined) {
             // 10-08-2015 - Check if pending orders correctly reconcile with executed orders
@@ -82,7 +89,7 @@ SquareOff = function () {
                     SELLQty += order.Quantity;
             }
             if (BUYQty != SELLQty)
-                console.error('Pending & executed orders do not reconcile', k, JSON.stringify(orders[k]));
+                console.error(k, 'Pending & executed orders do not reconcile', JSON.stringify(orders[k]));
 
             orders[k].pending.length = 0;
             if (orders[k].executed.BUYQty != orders[k].executed.SELLQty)
@@ -117,7 +124,8 @@ StartSimulation = function () {
     window.polledTime = new Date();
     var rangeStartTime = new Date(processingDate + 'T03:46:00.000Z');
     var rangeIndex = 0;
-    var deferCalculateRange = setInterval(function () {
+
+    ProcessSimulation = function () {
         polledTime.setTime(rangeStartTime.getTime() + rangeIndex * 2 * 60 * 1000);
 
         var changed = false;
@@ -158,21 +166,32 @@ StartSimulation = function () {
         }
         CalculateRange();
 
-        if (changed)
+        if (changed) {
             rangeIndex++;
+            setTimeout(ProcessSimulation, 0);
+        }
         else {
-            clearInterval(deferCalculateRange);
-
+            var grossValue = 0;
             var netValue = 0;
             for (var k = 0; k < orders.length; k++)
-                if (orders[k] != undefined)
-                    netValue += orders[k].executed.SELLValue - orders[k].executed.BUYValue;
+                if (orders[k] != undefined) {
+                    grossValue += orders[k].executed.SELLValue - orders[k].executed.BUYValue;
+                    netValue += orders[k].executed.SELLValue - orders[k].executed.BUYValue * 1.0012;
+                }
+
+            log.grossValue.style.color = grossValue > 0 ? 'green' : 'red';
+            log.grossValue.innerHTML = '₹' + grossValue.toComma(2);
+
             log.netValue.style.color = netValue > 0 ? 'green' : 'red';
             log.netValue.innerHTML = '₹' + netValue.toComma(2);
 
+            var elapsedTime = new Date().getTime() - simulationStartTime;
+            log.elapsedTime.innerHTML = ('0' + Math.floor(elapsedTime / 1000 / 60)).slice(-2) + ':' + ('0' + Math.floor(elapsedTime / 1000 % 60)).slice(-2);
+
             log.handle.GotoNext();
         }
-    }, 1 * 1000);
+    };
+    ProcessSimulation();
 };
 
 InitializeSimulation = function () {
@@ -188,10 +207,13 @@ InitializeSimulation = function () {
         'handle': handle,
         'processingDate': row.insertCell(0),
         'availableFunds': row.insertCell(1),
-        'netValue': row.insertCell(2)
+        'grossValue': row.insertCell(2),
+        'netValue': row.insertCell(3),
+        'elapsedTime': row.insertCell(4)
     };
     handle.document.getElementById('next').innerHTML = $('#dates option:selected').next().text() == '' ? '-' : $('#dates option:selected').next().text();
 
+    window.simulationStartTime = new Date().getTime();
     $.getJSON($('#dates').val(), function (result) {
         archive = result;
         StartSimulation();
@@ -246,7 +268,7 @@ DoSomething = function () {
     inputScripts.addEventListener('click', function (e) {
         var handle = window.open();
         PrepareAlternateWindow(handle, {
-            'text': $('#scripts').text(),
+            'text': $('#scripts option:selected').text(),
             'val': $('#scripts').val()
         });
     });
