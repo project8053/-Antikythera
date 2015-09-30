@@ -342,17 +342,17 @@
                     context.stroke();
 
                     if (data[k].studies.regression != undefined) {
-                        document.getElementById('angle_' + k).innerHTML = data[k].studies.regression.angle[data[k].studies.regression.angle.length - 1].toStyle(STYLE.DEGREE) + '<br>';
-                        if (data[k].studies.regression.deviation.length > 0)
-                            document.getElementById('angle_' + k).innerHTML += data[k].studies.regression.deviation[data[k].studies.regression.deviation.length - 1].toStyle(STYLE.PERMILLE | STYLE.REDUCED | STYLE.GRAY)
+                        document.getElementById('angle_' + k).innerHTML = data[k].studies.regression.all.angle[data[k].studies.regression.all.angle.length - 1].toStyle(STYLE.DEGREE) + '<br>';
+                        if (data[k].studies.regression.n.angle.length > 0)
+                            document.getElementById('angle_' + k).innerHTML += data[k].studies.regression.n.angle[data[k].studies.regression.n.angle.length - 1].toStyle(STYLE.DEGREE | STYLE.REDUCED)
                         else
                             document.getElementById('angle_' + k).innerHTML += '-';
                     }
 
                     if (data[k].studies.regression != undefined) {
-                        if (data[k].studies.regression.slope.length > 0) {
-                            var m = data[k].studies.regression.slope[data[k].studies.regression.slope.length - 1];
-                            var b = data[k].studies.regression.intercept[data[k].studies.regression.slope.length - 1];
+                        if (data[k].studies.regression.n.slope.length > 0) {
+                            var m = data[k].studies.regression.n.slope[data[k].studies.regression.n.slope.length - 1];
+                            var b = data[k].studies.regression.n.intercept[data[k].studies.regression.n.slope.length - 1];
 
                             var p1 = m * (data[k].range.length - SETTING.SLOPE_MIN_COUNT - 10) + b;
                             var p2 = m * (data[k].range.length + 10) + b;
@@ -369,9 +369,13 @@
 
                             var canvas2 = document.getElementById('slope_' + k);
                             var angleMin = 0, angleMax = 0;
-                            for (var i = 0; i < data[k].studies.regression.angle.length; i++) {
-                                angleMin = data[k].studies.regression.angle[i] < angleMin ? data[k].studies.regression.angle[i] : angleMin;
-                                angleMax = data[k].studies.regression.angle[i] > angleMax ? data[k].studies.regression.angle[i] : angleMax;
+                            for (var i = 0; i < data[k].studies.regression.all.angle.length; i++) {
+                                angleMin = data[k].studies.regression.all.angle[i] < angleMin ? data[k].studies.regression.all.angle[i] : angleMin;
+                                angleMax = data[k].studies.regression.all.angle[i] > angleMax ? data[k].studies.regression.all.angle[i] : angleMax;
+                            }
+                            for (var i = 0; i < data[k].studies.regression.n.angle.length; i++) {
+                                angleMin = data[k].studies.regression.n.angle[i] < angleMin ? data[k].studies.regression.n.angle[i] : angleMin;
+                                angleMax = data[k].studies.regression.n.angle[i] > angleMax ? data[k].studies.regression.n.angle[i] : angleMax;
                             }
                             // 90 pixels = 180° change
                             SETTING.ANGLE_NORMALIZE_RATIO = 90 / 180;
@@ -388,16 +392,42 @@
                             context2.stroke();
 
                             context2.beginPath();
-                            for (var i = 0; i < data[k].studies.regression.angle.length; i++) {
-                                var y = canvas2.height * (angleMax - data[k].studies.regression.angle[i]) / (angleMax - angleMin);
+                            for (var i = 0; i < data[k].studies.regression.n.angle.length; i++) {
+                                var y = canvas2.height * (angleMax - data[k].studies.regression.n.angle[i]) / (angleMax - angleMin);
                                 if (i == 0)
                                     context2.moveTo(i + SETTING.SLOPE_MIN_COUNT + 0.5, y);
                                 else
                                     context2.lineTo(i + SETTING.SLOPE_MIN_COUNT + 0.5, y);
                             }
+                            context2.setLineDash([1, 1]);
+                            context2.strokeStyle = 'blue';
+                            context2.stroke();
+
+                            context2.beginPath();
+                            var offset = data[k].range.length - data[k].studies.regression.all.angle.length;
+                            for (var i = 0; i < data[k].studies.regression.all.angle.length; i++) {
+                                var y = canvas2.height * (angleMax - data[k].studies.regression.all.angle[i]) / (angleMax - angleMin);
+                                if (i == 0)
+                                    context2.moveTo(i + offset + 0.5, y);
+                                else
+                                    context2.lineTo(i + offset + 0.5, y);
+                            }
                             context2.setLineDash([0]);
                             context2.strokeStyle = 'blue';
                             context2.stroke();
+
+                            /*
+                            context2.beginPath();
+                            for (var i = 0; i < data[k].studies.regression.n.angle.length; i++) {
+                            var y = canvas2.height * (angleMax - data[k].studies.regression.n.angle[i]) / (angleMax - angleMin);
+                            if (i == 0)
+                            context2.moveTo(i + SETTING.SLOPE_MIN_COUNT + 0.5, y);
+                            else
+                            context2.lineTo(i + SETTING.SLOPE_MIN_COUNT + 0.5, y);
+                            }
+                            context2.setLineDash([0]);
+                            context2.strokeStyle = 'green';
+                            context2.stroke(); */
                         }
                     }
 
@@ -710,15 +740,23 @@
             //SETTING.SLOPE_DEV_MIN_COUNT = 15;
             SETTING.SLOPE_MIN_COUNT_2 = 45;
 
-            if (data[k].range.length >= SETTING.SLOPE_MIN_COUNT) {
-                if (data[k].studies.regression == undefined)
-                    data[k].studies.regression = {
+            if (data[k].studies.regression == undefined)
+                data[k].studies.regression = {
+                    'all': {
                         'slope': [],
                         'intercept': [],
                         'angle': [],
                         'deviation': []
-                    };
+                    },
+                    'n': {
+                        'slope': [],
+                        'intercept': [],
+                        'angle': [],
+                        'deviation': []
+                    }
+                };
 
+            if (data[k].range.length >= SETTING.SLOPE_MIN_COUNT) {
                 var x = 0, xx = 0, y = 0, xy = 0;
                 for (var i = data[k].range.length - SETTING.SLOPE_MIN_COUNT; i < data[k].range.length; i++) {
                     x += (i + 1);
@@ -728,10 +766,10 @@
                 }
 
                 var m = ((SETTING.SLOPE_MIN_COUNT * xy) - (x * y)) / ((SETTING.SLOPE_MIN_COUNT * xx) - (x * x));
-                data[k].studies.regression.slope.push(m);
+                data[k].studies.regression.n.slope.push(m);
 
                 var b = (y - m * x) / SETTING.SLOPE_MIN_COUNT;
-                data[k].studies.regression.intercept.push(b);
+                data[k].studies.regression.n.intercept.push(b);
 
                 var p1 = b; // x = 0, y = mx + b
                 var p2 = m * SETTING.SLOPE_MIN_COUNT + b; // x = SETTING.SLOPE_MIN_COUNT
@@ -740,7 +778,48 @@
                 var y2 = SETTING.DISPLAY_NORMALIZE_RATIO * (data[k].limits.highPrice - p2) / data[k].limits.highPrice;
 
                 var angle = Math.atan((y1 - y2) / SETTING.SLOPE_MIN_COUNT) * 180 / Math.PI;
-                data[k].studies.regression.angle.push(angle);
+                data[k].studies.regression.n.angle.push(angle);
+            }
+
+            var index = data[k].range.length;
+
+            if (index >= 1) {
+                var x = 0, xx = 0, y = 0, xy = 0;
+                for (var i = 0; i < index; i++) {
+                    x += (i + 1);
+                    xx += (i + 1) * (i + 1);
+                    y += data[k].range[i].closePrice;
+                    xy += (i + 1) * data[k].range[i].closePrice;
+                }
+
+                var m = ((index * xy) - (x * y)) / ((index * xx) - (x * x));
+                data[k].studies.regression.all.slope.push(m);
+
+                var b = (y - m * x) / index;
+                data[k].studies.regression.all.intercept.push(b);
+
+                var p1 = b; // x = 0, y = mx + b
+                var p2 = m * index + b; // x = index
+
+                var y1 = SETTING.DISPLAY_NORMALIZE_RATIO * (data[k].limits.highPrice - p1) / data[k].limits.highPrice;
+                var y2 = SETTING.DISPLAY_NORMALIZE_RATIO * (data[k].limits.highPrice - p2) / data[k].limits.highPrice;
+
+                var angle = Math.atan((y1 - y2) / SETTING.SLOPE_MIN_COUNT) * 180 / Math.PI;
+                data[k].studies.regression.all.angle.push(angle);
+            }
+
+            return;
+
+
+            if (data[k].range.length >= SETTING.SLOPE_MIN_COUNT) {
+                if (data[k].studies.regression == undefined)
+                    data[k].studies.regression = {
+                        'slope': [],
+                        'intercept': [],
+                        'angle': [],
+                        'deviation': []
+                    };
+
 
                 //if (data[k].studies.regression.slope.length >= SETTING.SLOPE_DEV_MIN_COUNT) {
                 //  var mean = 0;
@@ -792,7 +871,7 @@
                         'xx': 0
                     }
                 };
-            
+
             var x = data[k].studies.regression.temp.x += index;
             var y = data[k].studies.regression.temp.y += data[k].range[index - 1].closePrice;
             var xy = data[k].studies.regression.temp.xy += index * data[k].range[index - 1].closePrice;
@@ -968,8 +1047,8 @@
                             var b = data[b].studies.trend.length > 0 == undefined ? 0 : data[b].studies.trend[data[b].studies.trend.length - 1]['ADX'];
                             return b - a;
                         case SORT.SLOPE_ANGLE:
-                            var a = data[a].studies.regression == undefined || data[a].studies.regression.angle.length == 0 ? 0 : Math.abs(data[a].studies.regression.angle[data[a].studies.regression.angle.length - 1]);
-                            var b = data[b].studies.regression == undefined || data[b].studies.regression.angle.length == 0 ? 0 : Math.abs(data[b].studies.regression.angle[data[b].studies.regression.angle.length - 1]);
+                            var a = data[a].studies.regression == undefined || data[a].studies.regression.all.angle.length == 0 ? 0 : Math.abs(data[a].studies.regression.all.angle[data[a].studies.regression.all.angle.length - 1]);
+                            var b = data[b].studies.regression == undefined || data[b].studies.regression.all.angle.length == 0 ? 0 : Math.abs(data[b].studies.regression.all.angle[data[b].studies.regression.all.angle.length - 1]);
                             return b - a;
                     }
                 }
