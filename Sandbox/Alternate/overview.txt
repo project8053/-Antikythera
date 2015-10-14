@@ -1,0 +1,2 @@
+slope-improved-GUI
++ onmouseover for td elements for better visualisation

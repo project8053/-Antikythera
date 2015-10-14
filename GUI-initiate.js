@@ -79,22 +79,26 @@ RefreshOrderBook = function () {
 
 WaitPlaceOrderReady = function () {
     try {
-        if (placeOrder.document.readyState == 'complete') {
+        // Checking for location.hostname since about:blank is opened immediately when the new window is launched
+        // Cross-origin error is not being activated for about:blank
+        if (placeOrder.location.hostname == location.hostname && placeOrder.document.readyState == 'complete') {
             var script = document.createElement('script');
             script.src = PATH + 'religare-place-order.js?ts=' + new Date().getTime();
             placeOrder.document.head.appendChild(script);
         }
         else
-            setTimeout(WaitPlaceOrderReady, SETTING.WAIT_DOCUMENT_INTERVAL);    
+            setTimeout(WaitPlaceOrderReady, SETTING.WAIT_DOCUMENT_INTERVAL);
     }
     catch (e) {
         setTimeout(WaitPlaceOrderReady, SETTING.WAIT_DOCUMENT_INTERVAL);
-    }    
+    }
 };
 
 WaitPositionReady = function () {
     try {
-        if (position.document.readyState == 'complete') {
+        // Checking for location.hostname since about:blank is opened immediately when the new window is launched
+        // Cross-origin error is not being activated for about:blank
+        if (position.location.hostname == location.hostname && position.document.readyState == 'complete') {
             var script = document.createElement('script');
             script.src = PATH + 'religare-position.js?ts=' + new Date().getTime();
             position.document.head.appendChild(script);

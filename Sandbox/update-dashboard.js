@@ -125,6 +125,11 @@ StartSimulation = function () {
     var rangeStartTime = new Date(processingDate + 'T03:46:00.000Z');
     var rangeIndex = 0;
 
+    RepeatSimulation = function () {
+        document.getElementById('clickToContinue').removeEventListener('click', RepeatSimulation);
+        ProcessSimulation();
+    };
+
     ProcessSimulation = function () {
         polledTime.setTime(rangeStartTime.getTime() + rangeIndex * 2 * 60 * 1000);
 
@@ -168,7 +173,10 @@ StartSimulation = function () {
 
         if (changed) {
             rangeIndex++;
-            setTimeout(ProcessSimulation, 0);
+            if (document.getElementById('checkOnSlowMo').checked)
+                document.getElementById('clickToContinue').addEventListener('click', RepeatSimulation);
+            else
+                setTimeout(ProcessSimulation, 0);
         }
         else {
             var grossValue = 0;
@@ -298,6 +306,25 @@ DoSomething = function () {
     });
     div.appendChild(inputDates);
 
+    div.appendChild(document.createElement('br'));
+
+    var inputCheck = document.createElement('input');
+    inputCheck.type = 'checkbox';
+    inputCheck.id = 'checkOnSlowMo';
+    if (document.cookie.indexOf('slowMoEnabled=') != -1)
+        inputCheck.checked = document.cookie.split('slowMoEnabled=')[1].split(';')[0] == 'yes';
+    inputCheck.addEventListener('change', function (e) {
+        document.cookie = 'slowMoEnabled=' + (inputCheck.checked ? 'yes' : 'no') + '; path=/; expires=Thu, 31 Dec 2099 12:00:00 UTC';
+    });
+    div.appendChild(inputCheck);
+
+    var inputNext = document.createElement('input');
+    inputNext.type = 'button';
+    inputNext.id = 'clickToContinue';
+    inputNext.value = '>>';
+    // Event handler for inputNext is added when and where necessary
+    div.appendChild(inputNext);
+
     // Populating of dates is done asynchronously
     $.getJSON('./Sandbox/available-dates.php', function (result) {
         result.sort(function (a, b) {
@@ -311,7 +338,7 @@ DoSomething = function () {
                 option.attr('selected', 'selected');
             $('#dates').append(option);
         });
-        
+
         if (window.nextDateDue != undefined && window.nextDateDue != '-')
             InitializeSimulation();
     });

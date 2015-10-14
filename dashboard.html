@@ -64,7 +64,7 @@
             'GOOGL_POST_LTP': 3,
             'RELGR_INITIALIZE': 4,
             'RELGR_PROCESS_ORDER': 5,
-            'RELGR_ORDER_EXECUTED': 6,
+            'RELGR_ORDER_STATUS_UPDATE': 6,
             'RELGR_SQUARE_OFF': 7
         };
 
@@ -111,7 +111,9 @@
             'CHECK_START_STATE_INIT_TIMEOUT': 10 * 60 * 1000,
             'ADX_STEP_1_PERIOD': 14,
             'ADX_STEP_2_PERIOD': 14,
+            // 30 pixels = 2% change
             'DISPLAY_NORMALIZE_RATIO': 30 / 0.02,
+            // 30 pixels = 1% change
             'SLOPE_NORMALIZE_RATIO': 30 / 0.01,
             'PSAR_INCR_ACC_FACTOR': 0.01,
             'EVAL_MAX_SLOPE_ANGLE': Math.PI / 4,
@@ -134,6 +136,8 @@
         var openRangeCalculateTime = new Date(new Date().getFullYear(), new Date().getMonth(), new Date().getDate(), 10, 30);
         // 10-08-2015 - For squaring off open orders
         var squareOffTime = new Date(new Date().getFullYear(), new Date().getMonth(), new Date().getDate(), 15, 0);
+
+        var rangeStableTime = new Date(new Date().getFullYear(), new Date().getMonth(), new Date().getDate(), 9, 30);
 
         Number.prototype.toStyle = function (style, points) {
             var fontSize = style & STYLE.REDUCED ? ';font-size: 9px' : '';
@@ -237,8 +241,9 @@
                         alert('Funds information not available.\nExecute ‘UpdateAvailableFunds(₹...)’ manually.');
                     break;
 
-                case CONTENT_TYPE.RELGR_ORDER_EXECUTED:
-                    console.log(event.data.executed);
+                case CONTENT_TYPE.RELGR_ORDER_STATUS_UPDATE:
+                    // details includes total executed summary at point of time + details of last executed order(s) 
+                    TrackOrdersStatus(event.data.k, event.data.details);
                     break;
             }
         };
@@ -270,6 +275,34 @@
             }
         };
 
+        DisplayMetrics = function (k, i) {
+            if (i < 0 || i >= data[k].range.length)
+                return;
+
+            var offset = {};
+            if (data[k].studies.regression != undefined) {
+                if (data[k].studies.regression.all.angle.length > 0)
+                    if (i >= data[k].range.length - data[k].studies.regression.all.angle.length)
+                        offset['regression.all'] = i - data[k].range.length + data[k].studies.regression.all.angle.length;
+                if (data[k].studies.regression.n.angle.length > 0)
+                    if (i >= data[k].range.length - data[k].studies.regression.n.angle.length)
+                        offset['regression.n'] = i - data[k].range.length + data[k].studies.regression.n.angle.length;                    
+            }
+
+            var offsetAngleAll = data[k].studies.regression == undefined ? undefined : data[k].range.length - data[k].studies.regression.all.angle.length;
+            var offsetAngleN = data[k].studies.regression == undefined ? undefined : data[k].range.length - data[k].studies.regression.all.angle.length;
+
+            var el = document.getElementById('metrics');
+            el.style.visibility = 'visible';
+            el.innerHTML = '#' + k + '<br>CP: ' + data[k].range[i].closePrice 
+                + '<br>θ (all): ' + (offset['regression.all'] != undefined ? data[k].studies.regression.all.angle[offset['regression.all']].toStyle(STYLE.DEGREE) : '-')
+                + '<br>θ (n): ' + (offset['regression.n'] != undefined ? data[k].studies.regression.n.angle[offset['regression.n']].toStyle(STYLE.DEGREE) : '-');
+        };
+
+        HideMetrics = function () {
+            document.getElementById('metrics').style.visibility = 'hidden';
+        };
+
         UpdateLayout = function () {
             try {
                 for (var k = 0; k < data.length; k++) {
@@ -279,8 +312,15 @@
                             noRows.parentNode.removeChild(noRows);
                         var row = document.createElement('tr');
                         row.id = 'quote_' + k;
-                        row.innerHTML = '<td style="text-align:left;"><a href="https://www.google.com/finance?q=BOM%3A' + data[k].symbol + '" target="_blank">' + data[k].securitySymbol + '</a><br>#' + k + '</td><td id="ltp_' + k + '">-<br>-</td><td><canvas id="chart_' + k + '" height="30" width="200"></canvas></td><td id="trades_' + k + '">-</td><td id="ohlc_' + k + '"></td><td><canvas id="trend_' + k + '" height="30" width="200"></canvas></td><td id="adx_' + k + '"></td><td><canvas id="slope_' + k + '" height="30" width="200"></canvas></td><td id="angle_' + k + '">-</td>';
+                        row.innerHTML = '<td style="text-align:left;"><a href="https://www.google.com/finance?q=BOM%3A' + data[k].symbol + '" target="_blank">' + data[k].securitySymbol + '</a><br>#' + k + '</td><td id="ltp_' + k + '">-<br>-</td><td id="visualisation_' + k + '" onmouseleave="HideMetrics()"><canvas id="chart_' + k + '" height="30" width="200"></canvas><br><canvas id="slope_' + k + '" height="30" width="200"></canvas></td><td id="trades_' + k + '">-</td><td id="ohlc_' + k + '"></td><td><canvas id="trend_' + k + '" height="30" width="200"></canvas></td><td id="adx_' + k + '"></td><td></td><td id="angle_' + k + '">-</td>';
                         document.getElementById('quote_container').appendChild(row);
+
+                        // Support for visualisation to easily identify studies & range
+                        document.getElementById('visualisation_' + k).addEventListener('mousemove', function (e) {
+                            var _k = this.id.split('_')[1];
+                            var x = e.clientX - document.getElementById('chart_' + _k).getBoundingClientRect().left;
+                            DisplayMetrics(_k, x);
+                        });
                     }
 
                     if (data[k].range.length == 0)
@@ -336,34 +376,126 @@
                     context.strokeStyle = 'red';
                     context.stroke();
 
-                    if (data[k].studies.regression.angle.length > 0) {
-                        document.getElementById('angle_' + k).innerHTML = (data[k].studies.regression.angle[data[k].studies.regression.angle.length - 1] * 180 / Math.PI).toStyle(STYLE.DEGREE) + '<br>' + data[k].studies.regression.deviation[data[k].studies.regression.angle.length - 1].toStyle(STYLE.PERMILLE | STYLE.REDUCED | STYLE.GRAY);
+                    if (data[k].studies.regression != undefined) {
+                        document.getElementById('angle_' + k).innerHTML = data[k].studies.regression.all.angle[data[k].studies.regression.all.angle.length - 1].toStyle(STYLE.DEGREE) + '<br>';
+                        if (data[k].studies.regression.n.angle.length > 0)
+                            document.getElementById('angle_' + k).innerHTML += data[k].studies.regression.n.angle[data[k].studies.regression.n.angle.length - 1].toStyle(STYLE.DEGREE | STYLE.REDUCED)
+                        else
+                            document.getElementById('angle_' + k).innerHTML += '-';
                     }
 
-                    if (true) {
-                        if (data[k].studies.regression.angle.length > 0) {
-                            var p2 = data[k].studies.regression.projection[data[k].studies.regression.angle.length - 1];
-                            var p1 = data[k].studies.regression.intersect[data[k].studies.regression.angle.length - 1];
+                    if (data[k].studies.regression != undefined) {
+                        if (data[k].studies.regression.n.slope.length > 0) {
+                            var m = data[k].studies.regression.n.slope[data[k].studies.regression.n.slope.length - 1];
+                            var b = data[k].studies.regression.n.intercept[data[k].studies.regression.n.slope.length - 1];
+
+                            var p1 = m * (data[k].range.length - SETTING.SLOPE_MIN_COUNT - 10) + b;
+                            var p2 = m * (data[k].range.length + 10) + b;
 
                             var y1 = canvas.height * (highPrice - p1) / (highPrice - lowPrice);
                             var y2 = canvas.height * (highPrice - p2) / (highPrice - lowPrice);
 
                             context.beginPath();
-                            context.moveTo(0.5, y1);
-                            context.lineTo(data[k].range.length - 0.5, y2);
+                            context.moveTo(data[k].range.length - SETTING.SLOPE_MIN_COUNT - 10 - 0.5, y1);
+                            context.lineTo(data[k].range.length + 10 - 0.5, y2);
                             context.setLineDash([0]);
-                            context.strokeStyle = 'red';
+                            context.strokeStyle = 'green';
                             context.stroke();
+
+                            var canvas2 = document.getElementById('slope_' + k);
+                            var angleMin = 0, angleMax = 0;
+                            for (var i = 0; i < data[k].studies.regression.all.angle.length; i++) {
+                                angleMin = data[k].studies.regression.all.angle[i] < angleMin ? data[k].studies.regression.all.angle[i] : angleMin;
+                                angleMax = data[k].studies.regression.all.angle[i] > angleMax ? data[k].studies.regression.all.angle[i] : angleMax;
+                            }
+                            for (var i = 0; i < data[k].studies.regression.n.angle.length; i++) {
+                                angleMin = data[k].studies.regression.n.angle[i] < angleMin ? data[k].studies.regression.n.angle[i] : angleMin;
+                                angleMax = data[k].studies.regression.n.angle[i] > angleMax ? data[k].studies.regression.n.angle[i] : angleMax;
+                            }
+                            // 90 pixels = 180° change
+                            SETTING.ANGLE_NORMALIZE_RATIO = 90 / 180;
+                            canvas2.height = Math.max(1, Math.ceil((angleMax - angleMin) * SETTING.ANGLE_NORMALIZE_RATIO));
+
+                            var context2 = canvas2.getContext('2d');
+
+                            var zeroPoint = Math.ceil(canvas2.height * angleMax / (angleMax - angleMin)) - 0.5;
+                            zeroPoint = zeroPoint < 0.5 ? 0.5 : zeroPoint;
+                            context2.moveTo(0, zeroPoint);
+                            context2.lineTo(canvas.width, zeroPoint);
+                            context2.setLineDash([3, 2]);
+                            context2.strokeStyle = '#A9A9A9';
+                            context2.stroke();
+
+                            context2.beginPath();
+                            for (var i = 0; i < data[k].studies.regression.n.angle.length; i++) {
+                                var y = canvas2.height * (angleMax - data[k].studies.regression.n.angle[i]) / (angleMax - angleMin);
+                                if (i == 0)
+                                    context2.moveTo(i + SETTING.SLOPE_MIN_COUNT + 0.5, y);
+                                else
+                                    context2.lineTo(i + SETTING.SLOPE_MIN_COUNT + 0.5, y);
+                            }
+                            context2.setLineDash([1, 1]);
+                            context2.strokeStyle = 'blue';
+                            context2.stroke();
+
+                            context2.beginPath();
+                            var offset = data[k].range.length - data[k].studies.regression.all.angle.length;
+                            for (var i = 0; i < data[k].studies.regression.all.angle.length; i++) {
+                                var y = canvas2.height * (angleMax - data[k].studies.regression.all.angle[i]) / (angleMax - angleMin);
+                                if (i == 0)
+                                    context2.moveTo(i + offset + 0.5, y);
+                                else
+                                    context2.lineTo(i + offset + 0.5, y);
+                            }
+                            context2.setLineDash([0]);
+                            context2.strokeStyle = 'blue';
+                            context2.stroke();
+
+                            /*
+                            context2.beginPath();
+                            for (var i = 0; i < data[k].studies.regression.n.angle.length; i++) {
+                            var y = canvas2.height * (angleMax - data[k].studies.regression.n.angle[i]) / (angleMax - angleMin);
+                            if (i == 0)
+                            context2.moveTo(i + SETTING.SLOPE_MIN_COUNT + 0.5, y);
+                            else
+                            context2.lineTo(i + SETTING.SLOPE_MIN_COUNT + 0.5, y);
+                            }
+                            context2.setLineDash([0]);
+                            context2.strokeStyle = 'green';
+                            context2.stroke(); */
                         }
                     }
 
+                    // Show executed buy & sell operations
                     context.beginPath();
-                    for (var i = 0; i < data[k].range.length; i++)
-                        if (data[k].range[i].traded) {
-                            var y = canvas.height * (highPrice - data[k].range[i].closePrice) / (highPrice - lowPrice);
-                            var star = document.getElementById('star');
-                            context.drawImage(star, i - (star.scrollWidth / 2) + 0.5, y - (star.scrollHeight / 2));
+                    if (data[k].trades != undefined && data[k].trades.all.length > 0)
+                        for (var i = 0; i < data[k].trades.all.length; i++) {
+                            var x = data[k].trades.all[i].atPos;
+                            var y = canvas.height * (highPrice - data[k].trades.all[i].executedPrice) / (highPrice - lowPrice);
+                            var img = document.getElementById(data[k].trades.all[i].transactionType == TRANSACTION_TYPE.BUY ? 'buy' : 'sell');
+                            context.drawImage(img, x - (img.scrollWidth / 2) + 0.5, y - (img.scrollHeight / 2));
                         }
+                    /*
+                    // Show PSAR
+                    context.beginPath();
+                    context.setLineDash([3, 2]);
+                    context.strokeStyle = 'black';
+                    var trend = data[k].studies.stoploss.trend[0];
+                    for (var i = 0; i < data[k].studies.stoploss.price.length; i++) {
+                    var y = canvas.height * (highPrice - data[k].studies.stoploss.price[i]) / (highPrice - lowPrice);
+                    if (trend != data[k].studies.stoploss.trend[i]) {
+                    context.stroke();
+                    context.beginPath();
+                    context.moveTo(i + 0.5, y);
+                    trend = data[k].studies.stoploss.trend[i];
+                    }
+                    else if (i == 0)
+                    context.moveTo(i + 0.5, y);
+                    else
+                    context.lineTo(i + 0.5, y);
+                    }
+                    context.stroke();
+                    */
                 }
             }
             catch (e) {
@@ -381,6 +513,41 @@
             squareOff = true;
         };
 
+        TrackOrdersStatus = function (k, details) {
+            console.log(k, details);
+            if (details.lastExecuted != undefined && details.lastExecuted.length != 0) {
+                if (data[k].trades == undefined)
+                    data[k].trades = {
+                        'BUYQty': 0,
+                        'SELLQty': 0,
+                        'all': []
+                    };
+
+                data[k].trades.BUYQty = details.summary.BUYQty;
+                data[k].trades.SELLQty = details.summary.SELLQty;
+
+                for (var i = 0; i < details.lastExecuted.length; i++) {
+                    if (data[k].trades.BUYQty != data[k].trades.SELLQty)
+                    // lastExecuted is available only if there is a mis-balance of BUY & SELL
+                        data[k].trades.lastExecuted = {
+                            'transactionType': details.lastExecuted[i].transactionType,
+                            'executedPrice': details.lastExecuted[i].executedPrice,
+                            'quantity': details.lastExecuted[i].quantity
+                        };
+                    else
+                        delete data[k].trades.lastExecuted;
+
+                    // For use in displaying trades in canvas + error checking
+                    data[k].trades.all.push({
+                        'transactionType': details.lastExecuted[i].transactionType,
+                        'executedPrice': details.lastExecuted[i].executedPrice,
+                        'atPos': data[k].range.length
+                    });
+                }
+            }
+            console.log(JSON.stringify(data[k].trades));
+        };
+
         var evaluateScrips = false;
         // 26-05-2015 - For Open Range Breakout calculation
         var isOpenRangeCalculated = false;
@@ -391,6 +558,9 @@
                     SquareOff();
                 return;
             }
+
+            // TEMPORARY FIX to prevent evaluation of open range
+            isOpenRangeCalculated = true;
 
             if (new Date() >= openRangeCalculateTime && !isOpenRangeCalculated) {
                 for (var k = 0; k < data.length; k++)
@@ -429,7 +599,6 @@
 
                             //var triggerPrice = ema5 > focus[j].openRangeLimits.highPrice ? focus[j].openRangeLimits.lowPrice : focus[j].openRangeLimits.highPrice;
                             var triggerPrice = ema5 > focus[j].openRangeLimits.highPrice ? Math.floor(focus[j].openRangeLimits.highPrice * (1 - 0.0025) * 20) / 20 : Math.ceil(focus[j].openRangeLimits.lowPrice * (1 + 0.0025) * 20) / 20;
-                            console.log(triggerPrice);
                             ProcessOrder(focus[j].k, {
                                 'TransactionType': transactionType == TRANSACTION_TYPE.BUY ? TRANSACTION_TYPE.SELL : TRANSACTION_TYPE.BUY,
                                 'OrderType': 'SL MARKET',
@@ -443,6 +612,64 @@
                     }
                 }
             }
+
+            var k = 0;
+            while (availableSlots > 0) {
+                if (data[k].trades != undefined)
+                    if (data[k].trades.lastExecuted != undefined) {
+                        var ema = data[k].studies.ma.ema5[data[k].studies.ma.ema5.length - 1];
+                        var quantity = data[k].trades.lastExecuted.quantity;
+                        var stoplossQuantity = Math.abs(data[k].trades.BUYQty - data[k].trades.SELLQty) + quantity;
+
+                        switch (data[k].trades.lastExecuted.transactionType) {
+                            case TRANSACTION_TYPE.BUY:
+                                if (ema > data[k].trades.lastExecuted.executedPrice * (1 + 0.0033)) {
+                                    ProcessOrder(k, {
+                                        'TransactionType': TRANSACTION_TYPE.BUY,
+                                        'OrderType': 'MARKET',
+                                        'Quantity': quantity
+                                    });
+
+                                    var triggerPrice = data[k].trades.lastExecuted.executedPrice * (1 - 0.0067);
+                                    ProcessOrder(k, {
+                                        'TransactionType': TRANSACTION_TYPE.SELL,
+                                        'OrderType': 'SL MARKET',
+                                        'TriggerPrice': triggerPrice,
+                                        'Quantity': stoplossQuantity
+                                    });
+
+                                    console.log(k, 'BUY', quantity, data[k].trades.lastExecuted.executedPrice, ema, triggerPrice, stoplossQuantity);
+                                    availableSlots--;
+                                    delete data[k].trades.lastExecuted;
+                                }
+                                break;
+                            case TRANSACTION_TYPE.SELL:
+                                if (ema < data[k].trades.lastExecuted.executedPrice * (1 - 0.0033)) {
+                                    ProcessOrder(k, {
+                                        'TransactionType': TRANSACTION_TYPE.SELL,
+                                        'OrderType': 'MARKET',
+                                        'Quantity': quantity
+                                    });
+
+                                    var triggerPrice = data[k].trades.lastExecuted.executedPrice * (1 + 0.0067);
+                                    ProcessOrder(k, {
+                                        'TransactionType': TRANSACTION_TYPE.BUY,
+                                        'OrderType': 'SL MARKET',
+                                        'TriggerPrice': triggerPrice,
+                                        'Quantity': stoplossQuantity
+                                    });
+
+                                    console.log(k, 'SELL', quantity, data[k].trades.lastExecuted.executedPrice, ema, triggerPrice, stoplossQuantity);
+                                    availableSlots--;
+                                    data[k].trades.lastExecuted;
+                                }
+                                break;
+                        }
+                    }
+                k++;
+                if (k >= data.length)
+                    break;
+            }
         };
 
         CalculateStudies = function (k) {
@@ -450,21 +677,36 @@
             if (data[k].studies.ma == undefined)
                 data[k].studies.ma = {
                     'ema5': [],
+                    'ema5High': [],
+                    'ema5Low': [],
                     'temp': {
-                        'total5': 0
+                        'total5': 0,
+                        'total5High': 0,
+                        'total5Low': 0
                     }
                 };
 
             if (data[k].range.length <= 5) {
                 data[k].studies.ma.temp.total5 += data[k].range[data[k].range.length - 1].closePrice;
                 data[k].studies.ma.ema5.push(data[k].studies.ma.temp.total5 / data[k].range.length);
+
+                data[k].studies.ma.temp.total5High += data[k].range[data[k].range.length - 1].highPrice;
+                data[k].studies.ma.ema5High.push(data[k].studies.ma.temp.total5High / data[k].range.length);
+
+                data[k].studies.ma.temp.total5Low += data[k].range[data[k].range.length - 1].lowPrice;
+                data[k].studies.ma.ema5Low.push(data[k].studies.ma.temp.total5Low / data[k].range.length);
             }
-            else
+            else {
                 data[k].studies.ma.ema5.push((data[k].studies.ma.ema5[data[k].studies.ma.ema5.length - 1] * 4 + data[k].range[data[k].range.length - 1].closePrice) / 5);
+                data[k].studies.ma.ema5High.push((data[k].studies.ma.ema5High[data[k].studies.ma.ema5High.length - 1] * 4 + data[k].range[data[k].range.length - 1].highPrice) / 5);
+                data[k].studies.ma.ema5Low.push((data[k].studies.ma.ema5Low[data[k].studies.ma.ema5Low.length - 1] * 4 + data[k].range[data[k].range.length - 1].lowPrice) / 5);
+            }
 
-
-
-
+            if (new Date() >= rangeStableTime && data[k].studies.focus == undefined) {
+                data[k].studies.focus = {
+                    'price': 1
+                };
+            }
 
             var anonFunc1 = (function () {
                 data[k].studies.trend = [];
@@ -529,17 +771,134 @@
                 }
             })();
 
+            SETTING.SLOPE_MIN_COUNT = 30;
+            //SETTING.SLOPE_DEV_MIN_COUNT = 15;
+            SETTING.SLOPE_MIN_COUNT_2 = 45;
+
+            if (data[k].studies.regression == undefined)
+                data[k].studies.regression = {
+                    'all': {
+                        'slope': [],
+                        'intercept': [],
+                        'angle': [],
+                        'deviation': []
+                    },
+                    'n': {
+                        'slope': [],
+                        'intercept': [],
+                        'angle': [],
+                        'deviation': []
+                    }
+                };
+
+            if (data[k].range.length >= SETTING.SLOPE_MIN_COUNT) {
+                var x = 0, xx = 0, y = 0, xy = 0;
+                for (var i = data[k].range.length - SETTING.SLOPE_MIN_COUNT; i < data[k].range.length; i++) {
+                    x += (i + 1);
+                    xx += (i + 1) * (i + 1);
+                    y += data[k].range[i].closePrice;
+                    xy += (i + 1) * data[k].range[i].closePrice;
+                }
+
+                var m = ((SETTING.SLOPE_MIN_COUNT * xy) - (x * y)) / ((SETTING.SLOPE_MIN_COUNT * xx) - (x * x));
+                data[k].studies.regression.n.slope.push(m);
+
+                var b = (y - m * x) / SETTING.SLOPE_MIN_COUNT;
+                data[k].studies.regression.n.intercept.push(b);
+
+                var p1 = b; // x = 0, y = mx + b
+                var p2 = m * SETTING.SLOPE_MIN_COUNT + b; // x = SETTING.SLOPE_MIN_COUNT
+
+                var y1 = SETTING.DISPLAY_NORMALIZE_RATIO * (data[k].limits.highPrice - p1) / data[k].limits.highPrice;
+                var y2 = SETTING.DISPLAY_NORMALIZE_RATIO * (data[k].limits.highPrice - p2) / data[k].limits.highPrice;
+
+                var angle = Math.atan((y1 - y2) / SETTING.SLOPE_MIN_COUNT) * 180 / Math.PI;
+                data[k].studies.regression.n.angle.push(angle);
+            }
+
+            var index = data[k].range.length;
+
+            if (index >= 1) {
+                var x = 0, xx = 0, y = 0, xy = 0;
+                for (var i = 0; i < index; i++) {
+                    x += (i + 1);
+                    xx += (i + 1) * (i + 1);
+                    y += data[k].range[i].closePrice;
+                    xy += (i + 1) * data[k].range[i].closePrice;
+                }
+
+                var m = ((index * xy) - (x * y)) / ((index * xx) - (x * x));
+                data[k].studies.regression.all.slope.push(m);
+
+                var b = (y - m * x) / index;
+                data[k].studies.regression.all.intercept.push(b);
+
+                var p1 = b; // x = 0, y = mx + b
+                var p2 = m * index + b; // x = index
+
+                var y1 = SETTING.DISPLAY_NORMALIZE_RATIO * (data[k].limits.highPrice - p1) / data[k].limits.highPrice;
+                var y2 = SETTING.DISPLAY_NORMALIZE_RATIO * (data[k].limits.highPrice - p2) / data[k].limits.highPrice;
+
+                var angle = Math.atan((y1 - y2) / SETTING.SLOPE_MIN_COUNT) * 180 / Math.PI;
+                data[k].studies.regression.all.angle.push(angle);
+            }
+
+            return;
+
+
+            if (data[k].range.length >= SETTING.SLOPE_MIN_COUNT) {
+                if (data[k].studies.regression == undefined)
+                    data[k].studies.regression = {
+                        'slope': [],
+                        'intercept': [],
+                        'angle': [],
+                        'deviation': []
+                    };
+
+
+                //if (data[k].studies.regression.slope.length >= SETTING.SLOPE_DEV_MIN_COUNT) {
+                //  var mean = 0;
+                //  for (var i = 0; i < SETTING.SLOPE_DEV_MIN_COUNT; i++)
+                //      mean += data[k].studies.regression.slope[data[k].studies.regression.slope.length - 1 - i];
+                //  mean /= SETTING.SLOPE_DEV_MIN_COUNT;
+
+                //  var variance = 0;
+                //  for (var i = 0; i < SETTING.SLOPE_DEV_MIN_COUNT; i++)
+                //      variance += (mean - data[k].studies.regression.slope[data[k].studies.regression.slope.length - 1 - i]) * (mean - data[k].studies.regression.slope[data[k].studies.regression.slope.length - 1 - i]);
+
+                var variance = 0;
+                for (var i = data[k].range.length - SETTING.SLOPE_MIN_COUNT; i < data[k].range.length; i++) {
+                    var diff = (data[k].range[i].closePrice - (m * i + b)) / (m * i + b);
+                    variance += diff * diff;
+                }
+                variance /= SETTING.SLOPE_MIN_COUNT;
+
+                var stdDev = Math.sqrt(variance);
+                data[k].studies.regression.deviation.push(stdDev);
+                //}
+            }
+            return;
+
             var index = data[k].range.length;
             if (index == 0)
                 return;
 
             if (data[k].studies.regression == undefined)
                 data[k].studies.regression = {
-                    'slope': [],
-                    'intersect': [],
-                    'projection': [],
-                    'angle': [],
-                    'deviation': [],
+                    'all': {
+                        'slope': [],
+                        'intercept': [],
+                        'projection': [],
+                        'angle': [],
+                        'deviation': []
+                    },
+                    'n': {
+                        'slope': [],
+                        'intercept': [],
+                        'projection': [],
+                        'angle': [],
+                        'deviation': []
+                    },
                     'temp': {
                         'x': 0,
                         'y': 0,
@@ -559,7 +918,7 @@
                 var c = a + b * index;
 
                 data[k].studies.regression.slope.push(b);
-                data[k].studies.regression.intersect.push(a);
+                data[k].studies.regression.intercept.push(a);
                 data[k].studies.regression.projection.push(c);
 
                 var y1 = SETTING.SLOPE_NORMALIZE_RATIO * (data[k].limits.highPrice - a) / data[k].limits.highPrice;
@@ -621,8 +980,6 @@
                 data[k].studies.stoploss.price.push(temp.G);
                 data[k].studies.stoploss.trend.push(temp.L);
             }
-
-
         };
 
         var deferCalculateRange;
@@ -725,8 +1082,8 @@
                             var b = data[b].studies.trend.length > 0 == undefined ? 0 : data[b].studies.trend[data[b].studies.trend.length - 1]['ADX'];
                             return b - a;
                         case SORT.SLOPE_ANGLE:
-                            var a = data[a].studies.regression == undefined || data[a].studies.regression.angle.length == 0 ? 0 : Math.abs(data[a].studies.regression.angle[data[a].studies.regression.angle.length - 1]);
-                            var b = data[b].studies.regression == undefined || data[b].studies.regression.angle.length == 0 ? 0 : Math.abs(data[b].studies.regression.angle[data[b].studies.regression.angle.length - 1]);
+                            var a = data[a].studies.regression == undefined || data[a].studies.regression.all.angle.length == 0 ? 0 : Math.abs(data[a].studies.regression.all.angle[data[a].studies.regression.all.angle.length - 1]);
+                            var b = data[b].studies.regression == undefined || data[b].studies.regression.all.angle.length == 0 ? 0 : Math.abs(data[b].studies.regression.all.angle[data[b].studies.regression.all.angle.length - 1]);
                             return b - a;
                     }
                 }
@@ -833,6 +1190,12 @@
                 </tr>
             </tbody>
         </table>
+        <div>
+            <img src="buy.png" id="buy" alt="buy" style="vertical-align:middle"> &amp; <img src="sell.png" id="sell" alt="sell" style="vertical-align:middle"> indicate buy &amp; sell trades resp.              
+        </div>
+    </div>
+
+    <div id="metrics" style="position: fixed; left: 15px; top: 10px; width: 100px; padding: 2px; border: 1px solid #C8EFEA; color: #1C355D; background-color: #F8F8E4; visibility: hidden;">
     </div>
 
     <script>
