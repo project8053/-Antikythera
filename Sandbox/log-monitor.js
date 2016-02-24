@@ -38,15 +38,19 @@ CheckParentStatus = function () {
         setTimeout(CheckParentStatus, 1000);
 };
 
-GotoNext = function () {
+GotoNext = function (isGotoNextForced, alternateNextDate) {
     // In case the original parent is closed, reset parent with current window.opener
     if (parent.window == null)
         parent = window.opener;
 
-    if (nextButton.checked == false || document.getElementById('next').innerText == '-') {
-        parent.alert('Simulation complete!');
-        return;
-    }
+    if (isGotoNextForced == undefined)
+        if (nextButton.checked == false || document.getElementById('next').innerText == '-') {
+            parent.alert('Simulation complete!');
+            return;
+        }
+
+    if (alternateNextDate != undefined)
+        document.getElementById('next').innerText = alternateNextDate;
 
     parent.onbeforeunload = null;
     parent.location.reload();

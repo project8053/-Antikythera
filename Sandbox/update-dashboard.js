@@ -118,7 +118,7 @@ StartSimulation = function () {
     document.cookie = 'sampleFunds=' + document.getElementById('sampleFunds').value + '; path=/; expires=Thu, 31 Dec 2099 12:00:00 UTC';
     UpdateAvailableFunds(Number(document.getElementById('sampleFunds').value));
 
-    log.processingDate.innerHTML = $('#dates option:selected').text();
+    log.processingDate.innerHTML = '<a href="javascript:GotoNext(true, \'' + $('#dates option:selected').text() + '\')">' + $('#dates option:selected').text() + '</a>';
     log.availableFunds.innerHTML = '₹' + availableFunds.toComma(2);
 
     window.polledTime = new Date();
@@ -219,7 +219,7 @@ InitializeSimulation = function () {
         'netValue': row.insertCell(3),
         'elapsedTime': row.insertCell(4)
     };
-    handle.document.getElementById('next').innerHTML = $('#dates option:selected').next().text() == '' ? '-' : $('#dates option:selected').next().text();
+    handle.document.getElementById('next').innerHTML = $('#dates option:selected').next().text() == '' ? '-' : '<a href="javascript:GotoNext(true)">' + $('#dates option:selected').next().text() + '</a>';
 
     window.simulationStartTime = new Date().getTime();
     $.getJSON($('#dates').val(), function (result) {
@@ -236,7 +236,12 @@ PrepareAlternateWindow = function (handle, _technique) {
         alternate.id = 'alternate';
         alternate.style.paddingRight = '4px';
         alternate.innerHTML = _technique.text;
-        handle.document.getElementById('header').insertBefore(alternate, handle.document.getElementById('header').firstChild);
+
+        // 03-01-2016 - IF added since there was a delay in loading common.js during some runs
+        if (handle.document.getElementById('header') != null)
+            handle.document.getElementById('header').insertBefore(alternate, handle.document.getElementById('header').firstChild);
+        else
+            console.warn('Page not rendered completely');
 
         handle.technique = _technique;
         // DO NOT REMOVE (for use in log-monitor.js; place additional script) - $EOF$

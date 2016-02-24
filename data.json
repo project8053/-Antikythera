@@ -81,7 +81,7 @@
     { "symbol": "500112", "securitySymbol": "SBIN", "securitySeries": "A" },
     { "symbol": "500550", "securitySymbol": "SIEMENS", "securitySeries": "A" },
     { "symbol": "511218", "securitySymbol": "SRTRANSFIN", "securitySeries": "A" },
-    { "symbol": "500295", "securitySymbol": "SSLT", "securitySeries": "A" },
+    { "symbol": "500295", "securitySymbol": "VEDL", "securitySeries": "A" },
     { "symbol": "524715", "securitySymbol": "SUNPHARMA", "securitySeries": "A" },
     { "symbol": "500770", "securitySymbol": "TATACHEM", "securitySeries": "A" },
     { "symbol": "500800", "securitySymbol": "TATAGLOBAL", "securitySeries": "A" },
