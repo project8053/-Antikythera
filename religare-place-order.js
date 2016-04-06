@@ -6,7 +6,9 @@ var CONTENT_TYPE = {
     'RELGR_INITIALIZE': 4,
     'RELGR_PROCESS_ORDER': 5,
     'RELGR_ORDER_EXECUTED': 6,
-    'RELGR_SQUARE_OFF': 7
+    'RELGR_SQUARE_OFF': 7,
+    // 04-04-2016 - Bring attention to issues by sounding alarm
+    'ATTN_ALARM': 8
 };
 
 var SETTING = {

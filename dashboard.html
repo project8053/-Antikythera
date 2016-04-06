@@ -83,6 +83,11 @@
         // connected to religare window
         ProcessMessage = function (event) {
             switch (event.data.type) {
+                // 04-04-2016 - Bring attention to issues by sounding alarm 
+                case CONTENT_TYPE.ATTN_ALARM:
+                    beep.play();
+                    break;
+
                 case CONTENT_TYPE.GOOGL_INITIALIZE:
                     var symbol = [];
                     for (var k = 0; k < data.length; k++)
@@ -139,6 +144,10 @@
 
         UpdateLTP = function (k, LTP) {
             data[k].LTP.push(LTP);
+            // 04-04-2016 - Added support for recording all LTP changes
+            data[k].priceChanges.LTP.push(LTP);
+            data[k].priceChanges.ts.push(new Date().getTime());
+
             if (document.getElementById('ltp_' + k) != null) {
                 var msg = LTP + '<br>';
                 if (data[k].limits.previousClosePrice != undefined)
@@ -168,7 +177,7 @@
 
             var el = document.getElementById('metrics');
             el.style.visibility = 'visible';
-            el.children[0].innerHTML = '#' + k + ' (i: ' + i + ')' 
+            el.children[0].innerHTML = '#' + k + ' (i: ' + i + ')'
                                     + '<br>CP: ' + data[k].range[i].closePrice
                                     + '<br>θ (all): ' + (offset['regression.all'] != undefined ? data[k].studies.regression.all.angle[offset['regression.all']].toStyle(STYLE.DEGREE) : '-')
                                     + '<br>θ (n): ' + (offset['regression.n'] != undefined ? data[k].studies.regression.n.angle[offset['regression.n']].toStyle(STYLE.DEGREE) : '-');
@@ -177,7 +186,7 @@
             el2.style.visibility = 'visible';
             el2.style.top = ($('#visualisation_' + k).offset().top - 4) + 'px';
             el2.style.height = ($('#visualisation_' + k).innerHeight() + 4 * 2) + 'px';
-            el2.style.left = ($('#visualisation_' + k).offset().left + i + 2) + 'px';             
+            el2.style.left = ($('#visualisation_' + k).offset().left + i + 2) + 'px';
         };
 
         HideMetrics = function () {
@@ -1039,6 +1048,13 @@
                         data[k].range = [];
                         data[k].studies = {};
                         data[k].limits = {};
+                        // 04-04-2016 - Added support for recording all LTP changes
+                        // Two arrays instead of one main to reduce size
+                        data[k].priceChanges = {
+                            'LTP': [],
+                            'ts': []
+                        };
+
                         // add k to dataPendingStartState; processing will start only later (once CheckIfOpen passes)
                         dataPendingStartState.push(k);
                     }

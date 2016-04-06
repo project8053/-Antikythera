@@ -1,0 +1,86 @@
+/* Execute on dashboard.html */
+
+window.open();
+
+/* Execute on about:blank */
+
+// 1. Ensure jquery is available; give sufficient time to load this script
+
+var script = document.createElement('script'); 
+script.src = 'https://localhost.daplie.com/~Antikythera/jquery-2.1.1.min.js'; 
+document.head.appendChild(script);
+
+// 2. Load the JSON file; big file - sufficient time needed + replace file name
+
+var filename = 'all-prices.2016.04.01#1';
+$.getJSON('https://localhost.daplie.com/~Antikythera/Sandbox/Non-canon/History/' + filename.replace('#', '%23') + '.json',
+ function (output) { 
+   window.data = output; 
+   console.log(window.data.length);
+  });
+
+// 3. Run in one quick move
+
+var maxts = 0, mints = Number.MAX_SAFE_INTEGER, startts = 0;
+for (var k = 0; k < data.length; k++) { 
+  var maxPrice = 0, minPrice = Number.MAX_SAFE_INTEGER; 
+  for (var i = 0; i < data[k].priceChanges.length; i++) { 
+    if (data[k].priceChanges[i].LTP > maxPrice) 
+      maxPrice = data[k].priceChanges[i].LTP;
+    if (data[k].priceChanges[i].LTP < minPrice) 
+      minPrice = data[k].priceChanges[i].LTP;
+
+    if (data[k].priceChanges[i].ts < mints)
+      mints = data[k].priceChanges[i].ts;
+    if (data[k].priceChanges[i].ts > maxts)
+      maxts = data[k].priceChanges[i].ts;
+  } 
+  if (data[k].priceChanges.length == 0)
+    continue;
+  data[k].limits = {
+    'maxPrice': maxPrice,
+    'minPrice': minPrice
+  };
+}
+startts = Math.floor(mints / 20000 - 1) * 20000;
+
+X = function (k, ts) {
+  return Math.floor((ts - startts) / 20000) - 0.5;
+};
+
+Y = function (k, price) {
+  return Math.ceil(50 * 100 * (data[k].limits.maxPrice - data[k].limits.minPrice) / data[k].limits.minPrice) - Math.ceil(50 * 100 * (price - data[k].limits.minPrice) / data[k].limits.minPrice) + 0.5;
+};
+
+var table = document.createElement('table');
+
+document.body.appendChild(table);
+for (var k = 0; k < data.length; k++) {
+  var row = table.insertRow(k);
+  row.insertCell(0).innerHTML = data[k].symbol;
+  if (data[k].priceChanges.length == 0)
+    continue;
+  var canvas = document.createElement('canvas');
+  canvas.width = Math.floor((maxts - startts) / 20000);
+  canvas.height = Math.ceil(50 * 100 * (data[k].limits.maxPrice - data[k].limits.minPrice) / data[k].limits.minPrice) + 1;
+  row.insertCell(1).appendChild(canvas);
+  data[k].canvas = canvas;
+}
+
+for (var k = 0; k < data.length; k++) {
+  if (data[k].priceChanges.length == 0)
+    continue; 
+  var canvas = data[k].canvas;
+  var context = canvas.getContext('2d');
+  context.beginPath();
+  for (var i = 0; i < data[k].priceChanges.length; i++) {
+    var x = X(k, data[k].priceChanges[i].ts);
+    var y = Y(k, data[k].priceChanges[i].LTP);
+    if (i == 0)
+      context.moveTo(x, y);
+    else
+      context.lineTo(x, y);
+  }
+  context.strokeStyle = 'red';
+  context.stroke();
+}

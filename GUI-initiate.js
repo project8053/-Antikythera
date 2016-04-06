@@ -5,7 +5,9 @@ var parent = window.opener;
 var CONTENT_TYPE = {
     'GOOGL_INITIALIZE': 1,
     'GOOGL_SETUP_DATA': 2,
-    'GOOGL_POST_LTP': 3
+    'GOOGL_POST_LTP': 3,
+    // 04-04-2016 - Bring attention to issues by sounding alarm
+    'ATTN_ALARM': 8   
 };
 
 var SETTING = {
@@ -62,6 +64,8 @@ TrackLTP = function () {
     var threshold = SETTING.STUDIES_CALC_INTERVAL / SETTING.TRACK_LTP_INTERVAL / 2;
     if (noChangeCount > threshold) {
         alert('Portfolio static; attempting reload', 'W');
+        // 04-04-2016 - Bring attention to issues by sounding alarm
+        parent.postMessage({ 'type': CONTENT_TYPE.ATTN_ALARM }, '*');
         noChangeCount = 0;
         iframe.src = portfolio;
     }
