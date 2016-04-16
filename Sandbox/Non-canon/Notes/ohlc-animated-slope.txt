@@ -1,0 +1,194 @@
+/* Execute on dashboard.html */
+
+window.open().document.body.innerHTML = '<svg id="svg" style="position:absolute;top:0;left:0;visibility:hidden;" height="10" width="10"><line id="line" x1="0" y1="0" x2="200" y2="200" style="stroke:rgb(0,102,221);"></line></svg>';
+
+/* Execute on about:blank */
+
+// 1. Ensure jquery is available; give sufficient time to load this script
+
+var script = document.createElement('script'); 
+script.src = 'https://localhost.daplie.com/~Antikythera/jquery-2.1.1.min.js'; 
+document.head.appendChild(script);
+
+// 2. Load the JSON file; big file - sufficient time needed + replace file name
+
+var filename = 'archive.2016.04.12';
+$.getJSON('https://localhost.daplie.com/~Antikythera/Sandbox/Non-canon/History%20(Google)/' + filename + '.json',
+  function (output) { 
+    window.data = [];
+
+    var startTime = new Date(output[0].range[0].asOf.split('T')[0] + 'T03:46:00.000Z').getTime();
+    for (var k = 0; k < output.length; k++) {
+      data.push({
+        'symbol': output[k].symbol,
+        'range': [],
+        'limits': {
+          'previousClosePrice': output[k].previousClosePrice
+        }
+      });
+      for (var i = 0; i < output[k].range.length; i++) {
+        var index = (new Date(output[k].range[i].asOf).getTime() - startTime) / 1000 / 120;
+        data[k].range[index] = output[k].range[i];
+      }
+    }
+  console.log(data.length);
+  });
+
+// 3. Calculate multiple limits
+
+var maxRange = 0;
+for (var k = 0; k < data.length; k++)
+  if (data[k].range.length > maxRange)
+    maxRange = data[k].range.length;
+console.log(maxRange, new Date().getTime());
+
+for (var k = 0; k < data.length; k++) {
+  data[k].percChange = [];
+  for (var i = 0; i < data[k].range.length; i++) {
+    if (data[k].range[i] == undefined)
+      continue;
+    data[k].percChange[i] = [
+      (data[k].range[i].openPrice - data[k].limits.previousClosePrice) / data[k].limits.previousClosePrice,
+      (data[k].range[i].highPrice - data[k].limits.previousClosePrice) / data[k].limits.previousClosePrice,
+      (data[k].range[i].lowPrice - data[k].limits.previousClosePrice) / data[k].limits.previousClosePrice,
+      (data[k].range[i].closePrice - data[k].limits.previousClosePrice) / data[k].limits.previousClosePrice
+    ];
+  }
+}
+console.log('percChange', new Date().getTime());
+
+for (var k = 0; k < data.length; k++) {
+  var maxPercChange = Number.MIN_SAFE_INTEGER, minPercChange = Number.MAX_SAFE_INTEGER;
+  for (var i = 0; i < data[k].percChange.length; i++)
+    for (var j = 0; j < 4; j++) {
+      if (data[k].percChange[i] == undefined)
+        continue;
+      if (data[k].percChange[i][j] > maxPercChange) maxPercChange = data[k].percChange[i][j];
+      if (data[k].percChange[i][j] < minPercChange) minPercChange = data[k].percChange[i][j];
+    }
+  data[k].limits.maxPercChange = maxPercChange;
+  data[k].limits.minPercChange = minPercChange;
+}
+console.log('limits', new Date().getTime());
+
+// 4. Calculate slope
+
+var SETTING = {
+  'REQD_SLOPE_CALC_VAL': 30
+};
+
+for (var k = 0; k < data.length; k++) {
+  data[k].regression = [];
+  for (var i = SETTING.REQD_SLOPE_CALC_VAL - 1; i < data[k].percChange.length; i++) {
+    data[k].regression[i] = [];
+    for (var p = 0; p < 4; p++) {
+      var x = 0, xx = 0, y = 0, xy = 0, n = 0;
+      for (var j = i; j > i - SETTING.REQD_SLOPE_CALC_VAL; j--) {
+        if (data[k].percChange[j] == undefined)
+          continue;
+        x += j;
+        xx += j * j;
+        y += data[k].percChange[j][p];
+        xy += j * data[k].percChange[j][p];
+        n++;
+      }
+      var m = ((n * xy) - (x * y)) / ((n * xx) - (x * x));
+      var b = (y - m * x) / n;
+      data[k].regression[i][p] = {
+        'm': m,
+        'b': b
+      };
+    }
+  }
+  console.log(k);
+}
+
+// 5. Prepare GUI
+
+var table = document.createElement('table');
+document.body.appendChild(table);
+for (var k = 0; k < data.length; k++) {
+  var row = table.insertRow(k);
+  row.insertCell(0).innerHTML = data[k].symbol;
+  if (data[k].range.length == 0)
+    continue;
+  row.insertCell(1).appendChild(data[k].canvas = document.createElement('canvas'));  
+  data[k].canvas.setAttribute('k', k);
+}
+console.log('table');
+
+for (var k = 0; k < data.length; k++) {
+  var canvas = data[k].canvas;
+  if (canvas == undefined)
+    continue;
+  canvas.width = maxRange * 4;
+  canvas.height = Math.ceil(50 * 100 * (data[k].limits.maxPercChange - data[k].limits.minPercChange)) + 1;
+  
+  var context = canvas.getContext('2d');
+  for (var i = 0; i < data[k].range.length; i++) {
+    if (data[k].range[i] == undefined)
+      continue;
+    
+    context.beginPath();
+    context.fillStyle = context.strokeStyle = data[k].range[i].openPrice > data[k].range[i].closePrice ? 'red' : (data[k].range[i].openPrice < data[k].range[i].closePrice ? 'green' : '#A9A9A9');
+
+    var x = 4 * i + 2.5;
+    if (data[k].range[i].highPrice == data[k].range[i].lowPrice) {
+      var y = Math.ceil(50 * 100 * (data[k].limits.maxPercChange - data[k].percChange[i][1]));
+      context.fillRect(x - 1.5, y, 3, 1);
+    }
+    else {
+      var yHigh, yLow, yOpen, yClose;
+      yHigh = Math.ceil(50 * 100 * (data[k].limits.maxPercChange - data[k].percChange[i][1]));
+      yLow = Math.ceil(50 * 100 * (data[k].limits.maxPercChange - data[k].percChange[i][2]));
+      yOpen = Math.ceil(50 * 100 * (data[k].limits.maxPercChange - data[k].percChange[i][0]));
+      yClose = Math.ceil(50 * 100 * (data[k].limits.maxPercChange - data[k].percChange[i][3]));
+
+      context.moveTo(x, yHigh);
+
+      context.lineTo(x, yLow + 1);
+      context.stroke();
+
+      context.fillRect(x - 1.5, yOpen, 1.5, 1);
+      context.fillRect(x, yClose, 1.5, 1);      
+    }
+  }  
+}
+
+// 6. Prepare event
+
+document.getElementById('svg').addEventListener('mouseleave', function (e) {
+  this.style.visibility = 'hidden';
+  document.getElementById('line').style.visibility = 'hidden';
+});
+
+document.getElementById('svg').addEventListener('mousemove', function (e) {
+  var i = Math.floor((e.pageX - $(this).offset().left) / 4);
+  var k = $(this).attr('k');
+  
+  if (data[k].regression[i] == undefined) {
+      document.getElementById('line').style.visibility = 'hidden';
+      return;
+  }
+
+  var m = data[k].regression[i][3].m;
+  var b = data[k].regression[i][3].b;
+
+  document.getElementById('line').setAttribute('x1', 4 * (i - 30) + 2.5); 
+  document.getElementById('line').setAttribute('y1', Math.ceil(50 * 100 * (data[k].limits.maxPercChange - (m * (i - 30) + b)))); 
+  document.getElementById('line').setAttribute('x2', 4 * (i + 15) + 2.5); 
+  document.getElementById('line').setAttribute('y2', Math.ceil(50 * 100 * (data[k].limits.maxPercChange - (m * (i + 15) + b)))); 
+  document.getElementById('line').style.visibility = 'visible';
+});
+
+Array.prototype.forEach.call(document.getElementsByTagName('canvas'), function (o) {
+  o.addEventListener('mouseenter', function (e) {
+    var svg = document.getElementById('svg');
+    svg.style.top = $(this).offset().top;
+    svg.style.left = $(this).offset().left;
+    svg.setAttribute('height', $(this).height());
+    svg.setAttribute('width', $(this).width());
+    svg.setAttribute('k', $(this).attr('k'));
+    svg.style.visibility = 'visible';
+  });
+});

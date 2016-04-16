@@ -1,0 +1,49 @@
+if (document.domain.indexOf('bseindia.com') != -1) {
+  if (location.href.indexOf('dashboard.aspx') != -1)
+    location.href = './WatchList/WatchListHome.aspx';
+  else if (location.href.indexOf('WatchList') != -1) {
+    document.domain = 'bseindia.com';
+
+    var watchList = [];
+    for (var iterator = 0; iterator < document.getElementById('ddlIW').getElementsByTagName('option').length; iterator++)
+      watchList.push(document.getElementById('ddlIW').getElementsByTagName('option')[iterator].value);
+
+    var nextStep = document.createElement('img');
+    nextStep.onclick = function() {
+      window.searchWindow = window.open('http://search.bseindia.com/StreamerEQStkReach/StockTickerBSEPlus.html?scripcode=sensex');
+    };
+    nextStep.src = 'https://cdn3.iconfinder.com/data/icons/google-material-design-icons/48/ic_navigate_next_48px-128.png';
+    nextStep.style.position = 'absolute';
+    nextStep.style.left = '0px';
+    nextStep.style.top = '0px';
+    document.body.appendChild(nextStep);
+  }
+  else if (location.href.indexOf('scripcode=sensex') != -1) {
+    var nextStep = document.createElement('img');
+    nextStep.onclick = function() {
+      window.searchWindow = window.open('about:blank');
+      searchWindow.watchListHome = window.opener;
+      window.close();
+    };
+    nextStep.src = 'https://cdn3.iconfinder.com/data/icons/google-material-design-icons/48/ic_navigate_next_48px-128.png';
+    nextStep.style.position = 'fixed';
+    nextStep.style.left = '0px';
+    nextStep.style.top = '0px';
+    document.body.appendChild(nextStep);
+  }
+}
+else if (window['watchListHome'] != null) {
+  document.domain = 'bseindia.com';
+
+  var scrollTo = document.body.scrollHeight;
+  for (var iterator = 0; iterator < watchListHome.watchList.length; iterator++) {
+    var iframe = watchListHome.document.createElement('iframe');
+    iframe.id = 'watchList' + iterator;
+    iframe.frameBorder = '0';
+    iframe.width = '100%';
+    iframe.height = watchListHome.innerHeight;
+    iframe.src = 'http://search.bseindia.com/StreamerEQStkReach/StockTickerBSEPlus.html?scripcode=' + watchListHome.watchList[iterator];
+    watchListHome.document.body.appendChild(iframe);
+  }
+  document.body.scrollTop = scrollTo;
+}

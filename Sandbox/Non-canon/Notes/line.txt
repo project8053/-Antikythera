@@ -1,0 +1,135 @@
+/* Execute on dashboard.html */
+
+window.open();
+
+/* Execute on about:blank */
+
+// 1. Ensure jquery is available; give sufficient time to load this script
+
+var script = document.createElement('script'); 
+script.src = 'https://localhost.daplie.com/~Antikythera/jquery-2.1.1.min.js'; 
+document.head.appendChild(script);
+
+// 2. Load the JSON file; big file - sufficient time needed + replace file name
+
+var filename = 'all-prices.2016.04.06#1';
+$.getJSON('https://localhost.daplie.com/~Antikythera/Sandbox/Non-canon/History/' + filename.replace('#', '%23') + '.json',
+ function (output) { 
+   window.data = output; 
+   console.log(window.data.length);
+  });
+
+// 3. Run in one quick move
+
+var SETTING = {
+  'REQD_SLOPE_CALC_VAL': 30
+};
+
+for (var k = 0; k < data.length; k++) {
+  if (data[k].priceChanges.length == 0)
+    continue;
+
+  // Calculate perc change from starting LTP
+  var startLTP = data[k].priceChanges[0].LTP;
+  for (var i = 0; i < data[k].priceChanges.length; i++)
+    data[k].priceChanges[i].percChange = (data[k].priceChanges[i].LTP - startLTP) / startLTP;
+
+  if (data[k].priceChanges.length >= SETTING.REQD_SLOPE_CALC_VAL) {
+    for (var j = SETTING.REQD_SLOPE_CALC_VAL - 1; j < data[k].priceChanges.length; j++) {
+      var x = 0, xx = 0, y = 0, xy = 0;
+      // Say, REQD_SLOPE_CALC_VAL = 30; j starting at 29 (because 0..29): for 40 = 11..40
+      for (var i = j - SETTING.REQD_SLOPE_CALC_VAL + 1; i <= j; i++) {
+        x += data[k].priceChanges[i].ts;
+        xx += data[k].priceChanges[i].ts * data[k].priceChanges[i].ts;
+        y += data[k].priceChanges[i].percChange;
+        xy += data[k].priceChanges[i].ts * data[k].priceChanges[i].percChange;
+      }
+
+      var m = ((SETTING.REQD_SLOPE_CALC_VAL * xy) - (x * y)) / ((SETTING.REQD_SLOPE_CALC_VAL * xx) - (x * x));
+      var b = (y - m * x) / SETTING.REQD_SLOPE_CALC_VAL;
+
+      data[k].priceChanges[j].m = m;
+      data[k].priceChanges[j].b = b;
+
+      var y1 = m * data[k].priceChanges[j - SETTING.REQD_SLOPE_CALC_VAL + 1].ts + b;
+      var y2 = m * data[k].priceChanges[j].ts + b;      
+      data[k].priceChanges[j].angle = Math.atan((y1 - y2) / (data[k].priceChanges[j - SETTING.REQD_SLOPE_CALC_VAL + 1].ts - data[k].priceChanges[j].ts)) * 180 / Math.PI;
+
+      var Y1 = Y(k, y1);
+      var Y2 = Y(k, y2);
+      var X1 = X(k, data[k].priceChanges[j - SETTING.REQD_SLOPE_CALC_VAL + 1].ts);
+      var X2 = X(k, data[k].priceChanges[j].ts);   
+      data[k].priceChanges[j].angle2 = Math.atan((Y1 - Y2) / (X1 - X2)) * 180 / Math.PI;   
+    } 
+  }
+  console.log(k, new Date());
+}
+
+var maxts = 0, mints = Number.MAX_SAFE_INTEGER, startts = 0;
+
+for (var k = 0; k < data.length; k++) { 
+  var maxPercChange = Number.MIN_SAFE_INTEGER, minPercChange = Number.MAX_SAFE_INTEGER; 
+  for (var i = 0; i < data[k].priceChanges.length; i++) { 
+
+    if (data[k].priceChanges[i].percChange > maxPercChange) 
+      maxPercChange = data[k].priceChanges[i].percChange;
+    if (data[k].priceChanges[i].percChange < minPercChange) 
+      minPercChange = data[k].priceChanges[i].percChange;
+
+    if (data[k].priceChanges[i].ts < mints)
+      mints = data[k].priceChanges[i].ts;
+    if (data[k].priceChanges[i].ts > maxts)
+      maxts = data[k].priceChanges[i].ts;
+  } 
+  if (data[k].priceChanges.length == 0)
+    continue;
+  data[k].limits = {
+    'maxPercChange': maxPercChange,
+    'minPercChange': minPercChange
+  };
+}
+startts = Math.floor(mints / 20000 - 1) * 20000;
+
+X = function (k, ts) {
+  return Math.floor((ts - startts) / 20000) - 0.5;
+};
+
+Y = function (k, percChange) {
+  return Math.ceil(50 * 100 * (data[k].limits.maxPercChange - data[k].limits.minPercChange)) - Math.ceil(50 * 100 * (percChange - data[k].limits.minPercChange)) + 0.5;
+};
+
+var table = document.createElement('table');
+
+document.body.appendChild(table);
+for (var k = 0; k < data.length; k++) {
+  var row = table.insertRow(k);
+  row.insertCell(0).innerHTML = data[k].symbol;
+  if (data[k].priceChanges.length == 0)
+    continue;
+  var canvas = document.createElement('canvas');
+  canvas.width = Math.floor((maxts - startts) / 20000);
+  canvas.height = Math.ceil(50 * 100 * (data[k].limits.maxPercChange - data[k].limits.minPercChange)) + 1;
+  row.insertCell(1).appendChild(canvas);
+  data[k].canvas = canvas;
+
+  canvas.onmousemove = function (e) {
+  };
+}
+
+for (var k = 0; k < data.length; k++) {
+  if (data[k].priceChanges.length == 0)
+    continue; 
+  var canvas = data[k].canvas;
+  var context = canvas.getContext('2d');
+  context.beginPath();
+  for (var i = 0; i < data[k].priceChanges.length; i++) {
+    var x = X(k, data[k].priceChanges[i].ts);
+    var y = Y(k, data[k].priceChanges[i].percChange);
+    if (i == 0)
+      context.moveTo(x, y);
+    else
+      context.lineTo(x, y);
+  }
+  context.strokeStyle = 'red';
+  context.stroke();
+}

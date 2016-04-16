@@ -8,7 +8,7 @@
   
   $count = count($contents);
 
-  $path = "./History/all-prices." . date("Y.m.d");
+  $path = "./History (Dashboard)/all-prices." . date("Y.m.d");
   $current_count = count(glob($path . "*.json")) + 1;
 
   file_put_contents($path . "#" . $current_count . ".json" , json_encode(array_values($contents)));
