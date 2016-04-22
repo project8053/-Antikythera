@@ -147,9 +147,12 @@ ProcessMessage = function (event) {
             window.deferGetSpan = setTimeout(GetSpan, SETTING.SPAN_CHECK_TIMEOUT);
             // Begin tracking LTP post market open time (no need to bother about whether market is actually open or not)
             setTimeout(function () {
+                // 22-04-2016 - Refresh iframe when market opens (to prevent loss of any initial price changes due to previous network failure)
+                // iframe & portfolio defined in InitiateGoogle
+                iframe.src = portfolio;
                 window.noChangeCount = 0;
                 window.deferTrackLTP = setInterval(TrackLTP, SETTING.TRACK_LTP_INTERVAL);
-                alert('Market presumed open; LTP tracking initiated');
+                alert('Market presumed open; portfolio refreshed & LTP tracking initiated');
                 // Stop tracking LTP when market is closed
                 setTimeout(function () {
                     clearInterval(deferTrackLTP);
