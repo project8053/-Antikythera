@@ -11,7 +11,7 @@ var pause = false;
 
 ProcessArchive = function () {
     var symbol = nodes[index].innerText;
-    input.src = 'https://www.google.com/finance/getprices?q=' + symbol + '&x=BOM&i=120&p=30d&f=d,c,v,o,h,l&df=cpct&auto=1&ts=' + new Date().getTime();
+    input.src = 'https://www.google.com/finance/getprices?q=' + symbol + '&x=BOM&i=120&p=5d&f=d,c,v,o,h,l&df=cpct&auto=1&ts=' + new Date().getTime();
 };
 
 window.addEventListener('message', function (event) {

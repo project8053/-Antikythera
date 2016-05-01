@@ -12,14 +12,19 @@
     $output = curl_exec($link);
     curl_close($link);
 
-    $format = "{ \"previousClosePrice\": %s, \"openPrice\": %s }";
     $nodes = explode("#", $output);
 
     date_default_timezone_set("Asia/Kolkata");
     $date = sprintf("As on %s | ", date("d M y"));
     if (substr($nodes[3], 0, strlen($date)) === $date) {
       $prices = explode(",", $nodes[6]);
-      echo sprintf($format, $prices[0], $prices[1]);
+      echo sprintf("{ \"previousClosePrice\": %s, \"openPrice\": %s }", $prices[0], $prices[1]);
+    }
+    // Only previous close price is needed, open price is not important (as of current implementation)
+    // PCP can be obtained looking at yesterday's data also
+    else if (substr($nodes[3], -9) === '| 16:00@C') {
+      $prices = explode(",", $nodes[6]);
+      echo sprintf("{ \"previousClosePrice\": %s }", $prices[4]);
     }
     else {
       echo "{ \"error\": \"data is invalid or for a prior date\" }";

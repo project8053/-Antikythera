@@ -1,0 +1,1200 @@
+﻿<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml">
+
+<head>
+    <title>Dashboard</title>
+    <script src="./jquery-2.1.1.min.js"></script>
+    <style>
+        th,
+        td {
+            padding: 2px;
+        }
+        
+        th {
+            border-right: 1px solid #C8EFEA;
+            border-bottom: 1px solid #C8EFEA;
+            color: #FFFFFF;
+            background-color: #25B3A2;
+        }
+        
+        td {
+            border-right: 1px solid #C8EFEA;
+            border-bottom: 1px solid #C8EFEA;
+            color: #1C355D;
+            background-color: #F8F8E4;
+        }
+        
+        td.no-border {
+            border-right: 0px none #000000;
+            border-bottom: 0px none #000000;
+            background-color: rgba(0, 0, 0, 0);
+        }
+        
+        sup {
+            vertical-align: baseline;
+            position: relative;
+            top: -0.4em;
+        }
+        
+        div {
+            margin-bottom: 10px;
+        }
+        
+        a:link {
+            text-decoration: none;
+            color: #1C355D;
+        }
+        
+        a:visited {
+            text-decoration: none;
+            color: #1C355D;
+        }
+        
+        a:hover {
+            text-decoration: none;
+            color: #25B3A2;
+        }
+        
+        a:active {
+            text-decoration: none;
+            color: #25B3A2;
+        }
+        
+        .sort {
+            cursor: ns-resize;
+        }
+        
+        .desc {
+            display: table-cell;
+            text-align: left;
+        }
+        
+        .value {
+            display: table-cell;
+            text-align: right;
+        }
+    </style>
+</head>
+
+<body style="font-family: Verdana; font-size: 10px">
+    <!-- 03-01-2016 - Removed rarely changed elements to common.js -->
+    <script>
+        var beep = new Audio('beep.wav');
+
+        var CONTENT_TYPE = {
+            'GOOGL_INITIALIZE': 1,
+            'GOOGL_SETUP_DATA': 2,
+            'GOOGL_POST_LTP': 3,
+            'RELGR_INITIALIZE': 4,
+            'RELGR_PROCESS_ORDER': 5,
+            'RELGR_ORDER_STATUS_UPDATE': 6,
+            'RELGR_SQUARE_OFF': 7,
+            // 04-04-2016 - Bring attention to issues by sounding alarm
+            'ATTN_ALARM': 8
+        };
+
+        var STATE = {
+            'OPEN': 1,
+            'CLOSE': 0
+        };
+
+        var TREND = {
+            'NONE': 0,
+            'BULL': 1,
+            'BEAR': 2
+        };
+
+        var STYLE = {
+            'PERCENT': parseInt('000001', 2),
+            'PERMILLE': parseInt('000010', 2),
+            'DEGREE': parseInt('000100', 2),
+            'REDUCED': parseInt('001000', 2),
+            'GRAY': parseInt('010000', 2),
+            'COMMA': parseInt('100000', 2)
+        };
+
+        var TRANSACTION_TYPE = {
+            'BUY': 1,
+            'SELL': 2
+        };
+
+
+        // 23-04-2016 - NEW used in current implementation, merge with others once promoted to main
+
+        var PRICE = {
+            'O': 0,
+            'H': 1,
+            'L': 2,
+            'C': 3
+        };
+
+        var FILTER = {
+            'NON_EMPTY': true
+        };
+
+        var SORT = {
+        // SORT values are unique to this script
+            'SYMBOL_NAME': 1,
+            'LTP_CHANGE': 2,
+            'C2O_CHANGE': 3,
+            'H2L_CHANGE': 4,
+            'SLOPE_ANGLE': 5,
+            'DERIVATIVE_ANGLE': 6
+        };
+
+        var SCALE = {
+            'X': 4,
+            'Y': {
+                'PERC_CHANGE': 50 * 100, // i.e. 50px for 1% change
+                'ANGLE': 1
+            }
+        };
+
+        var SETTING = {
+            'DO_SOMETHING_RETRY_INTERVAL': 5 * 1000,
+            'CHECK_OPEN_RETRY_INTERVAL': 5 * 1000,
+            'PRIOR_DATE_STATUS_RETRY_INTERVAL': 5 * 1000,
+            'STUDIES_CALC_INTERVAL': 2 * 60 * 1000,
+            'CHECK_START_STATE_INTERVAL': 1.5 * 1000,
+            'CHECK_START_STATE_INIT_TIMEOUT': 10 * 60 * 1000,
+            'MAX_SLOTS': 21,
+            'ADX_STEP_1_PERIOD': 14,
+            'ADX_STEP_2_PERIOD': 14,
+            'DISPLAY_NORMALIZE_RATIO': 30 / 0.02,
+            'SLOPE_NORMALIZE_RATIO': 30 / 0.01,
+            'PSAR_INCR_ACC_FACTOR': 0.01,
+            'EVAL_MAX_SLOPE_ANGLE': Math.PI / 4,
+            'EVAL_MIN_SLOPE_ANGLE': Math.PI / 8,
+            'EVAL_MAX_SLOPE_DEVIATION': 0.004,
+            'MIN_LTP_CONSIDERED': 83.33,
+            'MAX_LTP_CONSIDERED': 2083.33,
+            'MAX_FOCUS_CONSIDERED': 10,
+
+            'REG_FIRST_DER_COUNT': 26,
+            'REG_SECOND_DER_COUNT': 5
+        };
+
+        var marketSpeculativeOpenTime = new Date(new Date().getFullYear(), new Date().getMonth(), new Date().getDate(), 9, 14);
+        var marketCloseTime = new Date(new Date().getFullYear(), new Date().getMonth(), new Date().getDate(), 15, 30);
+        var startStatePollEndTime = new Date(new Date().getFullYear(), new Date().getMonth(), new Date().getDate(), 9, 55);
+        var evaluateScripsStartTime = new Date(new Date().getFullYear(), new Date().getMonth(), new Date().getDate(), 11, 0);
+        var evaluateScripsEndTime = new Date(new Date().getFullYear(), new Date().getMonth(), new Date().getDate(), 14, 0);
+        // 26-05-2015 - For Open Range Breakout calculation
+        var openRangeCalculateTime = new Date(new Date().getFullYear(), new Date().getMonth(), new Date().getDate(), 10, 30);
+        // 10-08-2015 - For squaring off open orders
+        var squareOffTime = new Date(new Date().getFullYear(), new Date().getMonth(), new Date().getDate(), 15, 0);
+
+        var rangeStableTime = new Date(new Date().getFullYear(), new Date().getMonth(), new Date().getDate(), 9, 30);
+
+        var sortParameter = [{
+            'text': 'Scrip',
+            'value': SORT.SYMBOL_NAME
+        }, {
+            'text': '%Chg',
+            'value': SORT.LTP_CHANGE
+        }, {
+            'text': 'C <i>to</i> O',
+            'value': SORT.C2O_CHANGE
+        }, {
+            'text': 'H <i>to</i> L',
+            'value': SORT.H2L_CHANGE
+        }, {
+            'text': '1<sup>st</sup> deriv.',
+            'value': SORT.SLOPE_ANGLE
+        }, {
+            'text': '2<sup>nd</sup> deriv.',
+            'value': SORT.DERIVATIVE_ANGLE
+        }];
+
+        Number.prototype.toStyle = function(style, points) {
+            var fontSize = style & STYLE.REDUCED ? ';font-size: 9px' : '';
+            var color = style & STYLE.GRAY ? 'color: #A9A9A9' : (this > 0 ? 'color: #093' : (this < 0 ? 'color: #D14836' : 'color: #A9A9A9'));
+            var value = Math.abs(style & STYLE.PERCENT ? this * 100 : (style & STYLE.PERMILLE ? this * 1000 : this)).toFixed(points == undefined ? 2 : points);
+            var suffix = style & STYLE.PERCENT ? '%' : (style & STYLE.PERMILLE ? '&permil;' : (style & STYLE.DEGREE ? '&deg;' : ''));
+            return '<span style="' + color + fontSize + '">' + value + suffix + '</span>';
+        };
+
+        Number.prototype.toComma = function(points) {
+            return this.toFixed(points == undefined ? 0 : Math.min(3, points)).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+        };
+
+        String.prototype.URL = function() {
+            return this + (this.indexOf('?') != -1 ? '&' : '?') + '_=' + new Date().getTime();
+        };
+
+        Array.prototype.max = function(param) {
+            if (param == undefined)
+                param = {};
+
+            var max = undefined;
+            for (var i = 0; i < this.length; i++)
+                if (max == undefined || this[i] > max)
+                    max = this[i];
+            if (param.preserveUndefined)
+                if (max == undefined)
+                    return;
+            if (param.includeZero)
+                if (max == undefined || 0 > max)
+                    max = 0;
+            return max;
+        };
+
+        Array.prototype.min = function(param) {
+            if (param == undefined)
+                param = {};
+
+            var min = undefined;
+            for (var i = 0; i < this.length; i++)
+                if (min == undefined || this[i] < min)
+                    min = this[i];
+            if (param.preserveUndefined)
+                if (min == undefined)
+                    return;
+            if (param.includeZero)
+                if (min == undefined || 0 < min)
+                    min = 0;
+            return min;
+        };
+
+        Slope = function (param) {
+            if (param == undefined || param.Y == undefined)
+                return;
+                
+            var Y = param.Y,
+                X = param.X == undefined ? Y.map(function (o, index) {
+                    return index;
+                }) : param.X;
+
+            var endPos = param.endPos == undefined ? Y.length - 1 : param.endPos,
+                countToConsider = param.countToConsider,
+                minCount = param.minCount,
+                ignoreUndefined = param.ignoreUndefined == true;
+            
+            Y = Y.slice(0, endPos + 1);
+            X = X.slice(0, endPos + 1);
+            
+            if (ignoreUndefined) {
+                X = X.filter(function (o, index) {
+                    return typeof Y[index] == 'number';
+                });
+                Y = Y.filter(function (o) {
+                    return typeof o == 'number';
+                });
+            }
+            
+            if (countToConsider != undefined) {
+                X = X.slice(-countToConsider);
+                Y = Y.slice(-countToConsider);
+            }
+                
+            var x = 0,
+                xx = 0,
+                y = 0,
+                xy = 0,
+                n = 0,
+                i = 0;
+            
+            for (; i < Y.length; i++) {
+                if (Y[i] == undefined)
+                    continue;
+                x += X[i];
+                xx += X[i] * X[i];
+                y += Y[i];
+                xy += X[i] * Y[i];
+                n++;
+            }
+
+            if (n < 2 || (minCount != undefined && i < minCount))
+                return;
+                
+            var m = ((n * xy) - (x * y)) / ((n * xx) - (x * x)), 
+                b = (y - m * x) / n;
+
+            return {
+                'm': m,
+                'b': b
+            };
+        };
+
+        var deferGetStartState;
+        var dataPendingStartState = [];
+        GetStartState = function() {
+            // GetStartState is called from CheckIfOpen, which is called only after dataPendingStartState is fully populated
+            // Hence, stop checks as soon as dataPendingStartState = empty
+            if (dataPendingStartState.length > 0) {
+                var k = dataPendingStartState.shift();
+                $.ajax({
+                    url: ('scrip-highlights.php?symbol=' + data[k].symbol).URL(),
+                    type: 'POST',
+                    success: function(result) {
+                        if (result.error != undefined) {
+                            console.error(k, result.error);
+                            // Post startStatePollEndTime, all scrips should have had previous close price updated. If not, it is likely
+                            // the price will not be updated today. So, only add the erroneous scrip back to queue if the deadline isn't crossed
+                            if (new Date() < startStatePollEndTime)
+                                dataPendingStartState.push(k);
+                        }
+                        else {
+                            data[k].limits.previousClosePrice = result.previousClosePrice;
+                            //openPrice of first valid range will be used
+                            //if (result.openPrice != undefined)
+                            //    data[k].limits.openPrice = result.openPrice;
+                        }
+                        deferGetStartState = setTimeout(GetStartState, SETTING.CHECK_START_STATE_INTERVAL);
+                    },
+                    error: function(HttpRequest, textStatus, errorThrown) {
+                        console.error(HttpRequest, textStatus, errorThrown);
+                        dataPendingStartState.push(k);
+                        deferGetStartState = setTimeout(GetStartState, SETTING.CHECK_START_STATE_INTERVAL);
+                    }
+                });
+            }
+        };
+
+        var availableFunds = 0,
+            perSlotBudget = 0,
+            availableSlots = SETTING.MAX_SLOTS;
+        UpdateAvailableFunds = function(_availableFunds) {
+            availableFunds = _availableFunds;
+            perSlotBudget = availableFunds / SETTING.MAX_SLOTS;
+            var msg = '+ Available funds: &#8377;' + availableFunds.toComma(2) + ' (per Scrip: &#8377;' + perSlotBudget.toComma(2) + ')';
+            if (document.getElementById('funds') != null)
+                document.getElementById('funds').innerHTML = msg;
+            else {
+                var funds = document.createElement('span');
+                funds.id = 'funds';
+                funds.style.paddingRight = '4px';
+                funds.innerHTML = msg;
+                document.getElementById('header').appendChild(funds);
+            }
+        };
+
+
+        var connected = false;
+        // connected to religare window
+        ProcessMessage = function(event) {
+            switch (event.data.type) {
+                // 04-04-2016 - Bring attention to issues by sounding alarm                                                                              
+                case CONTENT_TYPE.ATTN_ALARM:
+                    beep.play();
+                    break;
+
+                case CONTENT_TYPE.GOOGL_INITIALIZE:
+                    var symbol = [];
+                    for (var k = 0; k < data.length; k++)
+                        symbol.push(data[k].symbol);
+                    google.postMessage({
+                        'type': CONTENT_TYPE.GOOGL_SETUP_DATA,
+                        'symbol': symbol
+                    }, '*');
+                    var td = document.getElementById('state_google');
+                    td.style.color = '#093';
+                    td.innerHTML = 'ON';
+                    break;
+
+                case CONTENT_TYPE.GOOGL_POST_LTP:
+                    if (state == STATE.OPEN)
+                    // No possibility of previous close being mistaken for today's LTP as Google never posts the first LTP it encounters
+                        UpdateLTP(event.data.k, event.data.LTP);
+                    break;
+
+                case CONTENT_TYPE.RELGR_INITIALIZE:
+                    religare = event.source;
+                    connected = true;
+                    var td = document.getElementById('state_religare');
+                    td.style.color = '#093';
+                    td.innerHTML = 'ON';
+                    // 08-08-2015 - Update global fund data; if not availble, display message
+                    if (event.data.funds != 0)
+                        UpdateAvailableFunds(event.data.funds);
+                    else
+                        alert('Funds information not available.\nExecute ‘UpdateAvailableFunds(₹...)’ manually.');
+                    break;
+
+                case CONTENT_TYPE.RELGR_ORDER_STATUS_UPDATE:
+                    // details includes total executed summary at point of time + details of last executed order(s) 
+                    TrackOrdersStatus(event.data.k, event.data.details);
+                    break;
+            }
+        };
+
+        ProcessOrder = function(k, details) {
+            if (!connected)
+                console.error('Religare is offline');
+            else {
+                details['SecurityID'] = data[k].symbol;
+                details['TradingSymbol'] = data[k].securitySymbol;
+                details['Series'] = data[k].securitySeries;
+
+                religare.postMessage({
+                    'type': CONTENT_TYPE.RELGR_PROCESS_ORDER,
+                    'details': details
+                }, '*');
+            }
+        };
+
+        UpdateLTP = function(k, LTP) {
+            // Maintain a copy of the latest LTP for later use; needed because LTP[] is truncated once range is created
+            // Not using price changes as it is not canon
+            data[k].limits.LTP = LTP;
+            data[k].LTP.push(LTP);
+            // 04-04-2016 - Added support for recording all LTP changes
+            data[k].priceChanges.LTP.push(LTP);
+            data[k].priceChanges.ts.push(new Date().getTime());
+            // 25-04-2016 - Removed check for ID ltp_k as it is mostly redundant + restructuring
+            var msg = LTP + '<br>';
+            if (data[k].limits.previousClosePrice != undefined)
+                msg += ((LTP - data[k].limits.previousClosePrice) / data[k].limits.previousClosePrice).toStyle(STYLE.PERCENT);
+            else
+                msg += '-';
+            $('#ltp_' + k).html(msg);
+        };
+
+        DisplayMetrics = function(k, i) {
+            if (i < 0 || i >= data[k].range.length)
+                return;
+
+            var ltp = data[k].range[i] != undefined ? data[k].range[i].closePrice : undefined,
+                angle1 = data[k].studies.regression != undefined && data[k].studies.regression[i] != undefined ? data[k].studies.regression[i].angle.toStyle(STYLE.DEGREE) : '-',
+                angle2 = data[k].studies.secondDerivative != undefined && data[k].studies.secondDerivative[i] != undefined ? data[k].studies.secondDerivative[i].angle.toStyle(STYLE.DEGREE) : '-';
+            
+            if (ltp == undefined) {
+                ltp = '-';
+                for (var j = i; j >= 0; j--)
+                    if (data[k].range[j] != undefined) {
+                        ltp += ' (~' + data[k].range[j].closePrice + ')';
+                        break;
+                    }
+            }
+            
+            $('#metrics')
+                .html('<span style="display: table; width: 100%">'
+                        + '<span style="display: table-row">'
+                            + '<span class="desc"><i>#' + k + ' (i: ' + i + ')</i></span>'
+                            + '</span>'
+                        + '<span style="display: table-row">'
+                            + '<span class="desc">LTP</span>'
+                            + '<span class="value">' + ltp + '</span>'
+                        + '</span>'
+                        + '<span style="display: table-row">'
+                            + '<span class="desc">1<sup>st</sup> deriv.</span>'
+                            + '<span class="value">' + angle1 + '</span>'
+                        + '</span>'
+                        + '<span style="display: table-row">'
+                            + '<span class="desc">2<sup>nd</sup> deriv.</span>'
+                            + '<span class="value">' + angle2 + '</span>'
+                        + '</span>'
+                    + '</span>')
+                .show();
+
+            if (data[k].limits.maxPercChange != undefined && data[k].limits.minPercChange != undefined) {
+                var ltpPercChange = 0;
+                for (var j = i; j >= 0; j--)
+                    if (data[k].range[j] != undefined) {
+                        ltpPercChange = (data[k].range[j].closePrice - data[k].limits.previousClosePrice) / data[k].limits.previousClosePrice;
+                        break;
+                    }     
+                   
+                $('#text_1').attr('x', SCALE.X * i + 2.5).attr('y', data[k].offset[0] + Math.ceil(SCALE.Y.PERC_CHANGE * (data[k].limits.maxPercChange - ltpPercChange))).show();           
+            }
+            else
+                $('#text_1').hide();
+                
+            if (data[k].studies.regression[i] == undefined) {
+                $('#line_1').hide();
+                $('#text_2').hide();    
+            }
+            else {
+                var m = data[k].studies.regression[i].m;
+                var b = data[k].studies.regression[i].b;
+
+                $('#line_1').attr('x1', SCALE.X * (i - 30) + 2.5).attr('y1', data[k].offset[0] + Math.ceil(SCALE.Y.PERC_CHANGE * (data[k].limits.maxPercChange - (m * (i - 30) + b))));
+                $('#line_1').attr('x2', SCALE.X * (i + 5) + 2.5).attr('y2', data[k].offset[0] + Math.ceil(SCALE.Y.PERC_CHANGE * (data[k].limits.maxPercChange - (m * (i + 5) + b))));
+                $('#line_1').show();
+                
+                $('#text_2').attr('x', SCALE.X * i + 2.5).attr('y', data[k].offset[1] + Math.ceil(SCALE.Y.ANGLE * (data[k].limits.maxSlopeAngle - data[k].studies.regression[i].angle))).show();
+            }
+
+            if (data[k].studies.secondDerivative[i] == undefined) {
+                $('#line_2').hide();
+                $('#text_3').hide(); 
+            }
+            else {
+                var m = data[k].studies.secondDerivative[i].m;
+                var b = data[k].studies.secondDerivative[i].b;
+
+                $('#line_2').attr('x1', SCALE.X * (i - 15) + 2.5).attr('y1', data[k].offset[1] + Math.ceil(SCALE.Y.ANGLE * (data[k].limits.maxSlopeAngle - (m * (i - 15) + b))));
+                $('#line_2').attr('x2', SCALE.X * (i + 15) + 2.5).attr('y2', data[k].offset[1] + Math.ceil(SCALE.Y.ANGLE * (data[k].limits.maxSlopeAngle - (m * (i + 15) + b))));
+                $('#line_2').show();
+                
+                $('#text_3').attr('x', SCALE.X * i + 2.5).attr('y', data[k].offset[2] + Math.ceil(SCALE.Y.ANGLE * (data[k].limits.maxDerivativeAngle - data[k].studies.secondDerivative[i].angle))).show();
+            }
+        };
+        
+        UpdateKPI = function (k) {
+            if (data[k].limits.closePrice != undefined) {
+                // Here, the other limits are also defined
+                var c2o = data[k].KPI.c2o = (data[k].limits.closePrice - data[k].limits.openPrice) / data[k].limits.openPrice;
+                $('#kpi_' + k + ' .value:eq(0)').html(c2o.toStyle(STYLE.PERCENT));  
+                
+                var h2l = data[k].KPI.h2l = (data[k].limits.highPrice - data[k].limits.lowPrice) / data[k].limits.lowPrice;
+                $('#kpi_' + k + ' .value:eq(1)').html(h2l.toStyle(STYLE.PERCENT | STYLE.GRAY));  
+            }
+            
+            if (data[k].limits.maxSlopeAngle != undefined) {
+                var angle = data[k].studies.regression[data[k].studies.regression.length - 1].angle;
+                $('#kpi_' + k + ' .value:eq(2)').html(angle.toStyle(STYLE.DEGREE)); 
+            }
+            
+            if (data[k].limits.maxDerivativeAngle != undefined) {
+                var angle = data[k].studies.secondDerivative[data[k].studies.secondDerivative.length - 1].angle;
+                $('#kpi_' + k + ' .value:eq(3)').html(angle.toStyle(STYLE.DEGREE)); 
+            }
+        };
+
+        UpdateLayout = function () {
+            try {
+                var isStart, yZero;
+
+                for (var k = 0; k < data.length; k++) {
+                    if (document.getElementById('quote_' + k) == undefined) {
+                        $('<tr id="quote_' + k + '">')
+                            .html('<td><a href="https://www.google.com/finance?q=BOM%3A' + data[k].symbol + '" target="_blank">' + data[k].securitySymbol + '</a><br>#' + k + '</td>' 
+                                + '<td style="text-align: right;" id="ltp_' + k + '">-<br>-</td>' 
+                                + '<td><canvas id="visualisation_' + k + '" k="' + k + '" height="30" width="768"></canvas></td>' 
+                                + '<td id="kpi_' + k + '"></td>')
+                            .appendTo('#quote_container');
+                            
+                        $('#kpi_' + k)
+                            .html('<span style="display: table; width: 100%">'
+                                    + '<span style="display: table-row">'
+                                        + '<span class="desc">C <i>to</i> O</span>'
+                                        + '<span class="value">-</span>'
+                                    + '</span>'
+                                    + '<span style="display: table-row">'
+                                        + '<span class="desc">H <i>to</i> L</span>'
+                                        + '<span class="value">-</span>'
+                                    + '</span>'
+                                    + '<span style="display: table-row">'
+                                        + '<span class="desc">1<sup>st</sup> deriv.</span>'
+                                        + '<span class="value">-</span>'
+                                    + '</span>'
+                                    + '<span style="display: table-row">'
+                                        + '<span class="desc">2<sup>nd</sup> deriv.</span>'
+                                        + '<span class="value">-</span>'
+                                    + '</span>'
+                                + '</span>');
+
+                        // Linked with DisplayMetrics
+                        $('#visualisation_' + k).bind('mouseenter', function(e) {
+                            $('#svg').css('top', $(this).offset().top).css('left', $(this).offset().left);
+                            $('#svg').attr('height', $(this).height()).attr('width', $(this).width()).attr('k', $(this).attr('k'));
+                            $('#svg').show();
+                        });
+                    }
+
+                    if (data[k].range.length == 0)
+                        continue;
+                    
+                    // Even when previous close price is not defined, some KPIs might have value                     
+                    UpdateKPI(k);
+
+                    if (data[k].limits.maxPercChange == undefined || data[k].limits.minPercChange == undefined)
+                        continue;
+
+                    var canvas = $('#visualisation_' + k)[0];
+                    var height;
+                    if (data[k].limits.maxPercChange != undefined && data[k].limits.minPercChange != undefined)
+                        height = 2 + Math.ceil(SCALE.Y.PERC_CHANGE * (data[k].limits.maxPercChange - data[k].limits.minPercChange)) + 2;
+                    if (data[k].limits.maxSlopeAngle != undefined && data[k].limits.minSlopeAngle != undefined)
+                        height += 2 + Math.ceil(SCALE.Y.ANGLE * (data[k].limits.maxSlopeAngle - data[k].limits.minSlopeAngle)) + 2;
+                    if (data[k].limits.maxDerivativeAngle != undefined && data[k].limits.minDerivativeAngle != undefined)
+                        height += 2 + Math.ceil(SCALE.Y.ANGLE * (data[k].limits.maxDerivativeAngle - data[k].limits.minDerivativeAngle)) + 2;
+                    canvas.height = height;
+
+                    data[k].offset = [
+                        2,
+                        2 + Math.ceil(SCALE.Y.PERC_CHANGE * (data[k].limits.maxPercChange - data[k].limits.minPercChange)) + 2 + 2,
+                        2 + Math.ceil(SCALE.Y.PERC_CHANGE * (data[k].limits.maxPercChange - data[k].limits.minPercChange)) + 2 + 2 + Math.ceil(SCALE.Y.ANGLE * (data[k].limits.maxSlopeAngle - data[k].limits.minSlopeAngle)) + 2 + 2
+                    ];
+
+                    var context = canvas.getContext('2d');
+
+                    for (var i = 0; i < data[k].range.length; i++) {
+                        if (data[k].range[i] == undefined)
+                            continue;
+
+                        context.beginPath();
+                        context.fillStyle = context.strokeStyle = data[k].range[i].openPrice > data[k].range[i].closePrice ? 'red' : (data[k].range[i].openPrice < data[k].range[i].closePrice ? 'green' : '#A9A9A9');
+
+                        var x = SCALE.X * i + 2.5;
+                        if (data[k].range[i].highPrice == data[k].range[i].lowPrice) {
+                            var y = data[k].offset[0] + Math.ceil(SCALE.Y.PERC_CHANGE * (data[k].limits.maxPercChange - data[k].percChange[i][PRICE.H]));
+                            context.fillRect(x - 1.5, y, 3, 1);
+                        }
+                        else {
+                            var yHigh, yLow, yOpen, yClose;
+                            yHigh = data[k].offset[0] + Math.ceil(SCALE.Y.PERC_CHANGE * (data[k].limits.maxPercChange - data[k].percChange[i][PRICE.H]));
+                            yLow = data[k].offset[0] + Math.ceil(SCALE.Y.PERC_CHANGE * (data[k].limits.maxPercChange - data[k].percChange[i][PRICE.L]));
+                            yOpen = data[k].offset[0] + Math.ceil(SCALE.Y.PERC_CHANGE * (data[k].limits.maxPercChange - data[k].percChange[i][PRICE.O]));
+                            yClose = data[k].offset[0] + Math.ceil(SCALE.Y.PERC_CHANGE * (data[k].limits.maxPercChange - data[k].percChange[i][PRICE.C]));
+
+                            context.moveTo(x, yHigh);
+                            context.lineTo(x, yLow + 1);
+                            context.stroke();
+
+                            context.fillRect(x - 1.5, yOpen, 1.5, 1);
+                            context.fillRect(x, yClose, 1.5, 1);
+                        }
+                    }
+
+                    if (data[k].limits.maxSlopeAngle == undefined || data[k].limits.minSlopeAngle == undefined)
+                        continue;
+
+                    context.beginPath();
+
+                    yZero = data[k].offset[1] + Math.ceil(1 * (data[k].limits.maxSlopeAngle - 0)) + 0.5;
+                    context.moveTo(0, yZero);
+                    context.lineTo(SCALE.X * data[k].studies.regression.length, yZero);
+                    context.setLineDash([3, 2]);
+                    context.strokeStyle = '#A9A9A9';
+                    context.stroke();
+                    
+                    context.beginPath();
+                    context.setLineDash([0]);
+                    context.strokeStyle = '#0066DD';
+
+                    isStart = true;
+                    for (var i = 0; i < data[k].studies.regression.length; i++) {
+                        if (data[k].studies.regression == undefined || data[k].studies.regression[i] == undefined || data[k].studies.regression[i].angle == 0)
+                            continue;
+
+                        var x = SCALE.X * i + 2.5;
+                        var yAngle = data[k].offset[1] + Math.ceil(SCALE.Y.ANGLE * (data[k].limits.maxSlopeAngle - data[k].studies.regression[i].angle));
+
+                        if (isStart) {
+                            context.moveTo(x, yAngle);
+                            isStart = false;
+                        }
+                        else
+                            context.lineTo(x, yAngle);
+                    }
+                    context.stroke();
+
+                    if (data[k].limits.maxDerivativeAngle == undefined || data[k].limits.minDerivativeAngle == undefined)
+                        continue;
+
+                    context.beginPath();
+
+                    yZero = data[k].offset[2] + Math.ceil(1 * (data[k].limits.maxDerivativeAngle - 0)) + 0.5;
+                    context.moveTo(0, yZero);
+                    context.lineTo(SCALE.X * data[k].studies.secondDerivative.length, yZero);
+                    context.setLineDash([3, 2]);
+                    context.strokeStyle = '#A9A9A9';
+                    context.stroke();
+
+                    context.beginPath();
+                    context.setLineDash([0]);
+                    context.strokeStyle = '#C0809C';
+
+                    isStart = true;
+                    for (var i = 0; i < data[k].studies.secondDerivative.length; i++) {
+                        if (data[k].studies.secondDerivative == undefined || data[k].studies.secondDerivative[i] == undefined || data[k].studies.secondDerivative[i].angle == 0)
+                            continue;
+
+                        var x = SCALE.X * i + 2.5;
+                        var yAngle = data[k].offset[2] + Math.ceil(SCALE.Y.ANGLE * (data[k].limits.maxDerivativeAngle - data[k].studies.secondDerivative[i].angle));
+
+                        if (isStart) {
+                            context.moveTo(x, yAngle);
+                            isStart = false;
+                        }
+                        else
+                            context.lineTo(x, yAngle);
+                    }
+                    context.stroke();
+                                      
+                    // Trades would have happened only after evaluation of ALL studies had begun 
+                    if (data[k].trades != undefined && data[k].trades.all.length > 0) {
+                        context.beginPath();
+                        for (var i = 0; i < data[k].trades.all.length; i++) {
+                            var x = SCALE.X * data[k].trades.all[i].atPos + 2.5;
+                            var percChange = (data[k].trades.all[i].executedPrice - data[k].limits.previousClosePrice) / data[k].limits.previousClosePrice;
+                            var y = data[k].offset[0] + Math.ceil(SCALE.Y.PERC_CHANGE * (data[k].limits.maxPercChange - percChange));
+                            
+                            var img = document.getElementById(data[k].trades.all[i].transactionType == TRANSACTION_TYPE.BUY ? 'buy' : 'sell');
+                            context.drawImage(img, x - (img.scrollWidth / 2), y - (img.scrollHeight / 2));
+                        }
+                    }
+                }
+            }
+            catch (e) {
+                console.error('UpdateLayout', e);
+            }
+        };
+
+        // 10-08-2015 - For squaring off open orders
+        var squareOff = false;
+        SquareOff = function() {
+            if (!connected)
+                console.error('Religare is offline');
+            else
+                religare.postMessage({
+                    'type': CONTENT_TYPE.RELGR_SQUARE_OFF
+                }, '*');
+            squareOff = true;
+        };
+
+        TrackOrdersStatus = function(k, details) {
+            console.log(k, details);
+            if (details.lastExecuted != undefined && details.lastExecuted.length != 0) {
+                if (data[k].trades == undefined)
+                    data[k].trades = {
+                        'BUYQty': 0,
+                        'SELLQty': 0,
+                        'all': []
+                    };
+
+                data[k].trades.BUYQty = details.summary.BUYQty;
+                data[k].trades.SELLQty = details.summary.SELLQty;
+
+                for (var i = 0; i < details.lastExecuted.length; i++) {
+                    if (data[k].trades.BUYQty != data[k].trades.SELLQty)
+                    // lastExecuted is available only if there is a mis-balance of BUY & SELL
+                        data[k].trades.lastExecuted = {
+                        'transactionType': details.lastExecuted[i].transactionType,
+                        'executedPrice': details.lastExecuted[i].executedPrice,
+                        'quantity': details.lastExecuted[i].quantity
+                    };
+                    else
+                        delete data[k].trades.lastExecuted;
+
+                    // For use in displaying trades in canvas + error checking
+                    data[k].trades.all.push({
+                        'transactionType': details.lastExecuted[i].transactionType,
+                        'executedPrice': details.lastExecuted[i].executedPrice,
+                        'atPos': data[k].range.length // i.e. +1 of last calculated range
+                    });
+                }
+            }
+            console.log(JSON.stringify(data[k].trades));
+        };
+
+        var evaluateScrips = false;
+        // 26-05-2015 - For Open Range Breakout calculation
+        var isOpenRangeCalculated = false;
+        var focus = [];
+        EvaluateScrips = function() {
+            if (new Date() >= squareOffTime) {
+                if (!squareOff)
+                    SquareOff();
+                return;
+            }
+
+            for (var k = 0; k < data.length; k++) {
+                if (data[k].studies.secondDerivative != undefined) {
+                    var n = data[k].studies.secondDerivative.length;
+                    if (data[k].studies.secondDerivative[n - 2] != undefined && data[k].studies.secondDerivative[n - 1] != undefined) {
+                        var prev = data[k].studies.secondDerivative[n - 2].angle,
+                            curr = data[k].studies.secondDerivative[n - 1].angle;
+                        if (data[k].studies.secondDerivativeChanges == undefined)
+                            data[k].studies.secondDerivativeChanges = [];
+                        
+                        var quantity = Math.floor(perSlotBudget / data[k].limits.previousClosePrice);
+                        if (prev >= 0 && curr < 0) {
+                            data[k].studies.secondDerivativeChanges.push({
+                                'n': n - 1,
+                                'suggestedTransaction': TRANSACTION_TYPE.SELL
+                            });            
+                            
+                            ProcessOrder(k, {
+                                'TransactionType': TRANSACTION_TYPE.SELL,
+                                'OrderType': 'MARKET',
+                                'Quantity': quantity
+                            });              
+                        }
+                        else if (prev < 0 && curr >= 0) {
+                            data[k].studies.secondDerivativeChanges.push({
+                                'n': n - 1,
+                                'suggestedTransaction': TRANSACTION_TYPE.BUY
+                            });       
+                            
+                            ProcessOrder(k, {
+                                'TransactionType': TRANSACTION_TYPE.BUY,
+                                'OrderType': 'MARKET',
+                                'Quantity': quantity
+                            });                                                           
+                        }
+                    }
+                }
+            }
+
+        };
+
+        CalculateStudies = function(k) {
+            if (data[k].limits.previousClosePrice == undefined)
+            // Studies are based on perc. change; so if price is not available return & wait
+                return;
+            for (var i = data[k].percChange.length; i < data[k].range.length; i++) {
+                if (data[k].range[i] == undefined) {
+                    data[k].percChange[i] = undefined;
+                    continue;
+                    // i.e. code beyond this point is only executed for valid percChange[i]
+                }
+                data[k].percChange[i] = [
+                    (data[k].range[i].openPrice - data[k].limits.previousClosePrice) / data[k].limits.previousClosePrice,
+                    (data[k].range[i].highPrice - data[k].limits.previousClosePrice) / data[k].limits.previousClosePrice,
+                    (data[k].range[i].lowPrice - data[k].limits.previousClosePrice) / data[k].limits.previousClosePrice,
+                    (data[k].range[i].closePrice - data[k].limits.previousClosePrice) / data[k].limits.previousClosePrice
+                ];
+
+                // preserveUndefined flag is not required in max & min, as below is executed only for valid percChange[i][X]
+                data[k].limits.maxPercChange = [data[k].limits.maxPercChange, data[k].percChange[i][PRICE.H]].max({
+                    'includeZero': true
+                });
+                data[k].limits.minPercChange = [data[k].limits.minPercChange, data[k].percChange[i][PRICE.L]].min({
+                    'includeZero': true
+                });
+            }
+
+            if (data[k].studies.regression == undefined)
+                data[k].studies.regression = [];            
+            for (var i = data[k].studies.regression.length; i < data[k].range.length; i++) {
+                var o = Slope({
+                    'Y': data[k].percChange.map(function (o) {
+                        return o == undefined ? undefined : o[PRICE.C];
+                    }),
+                    'endPos': i,
+                    'countToConsider': SETTING.REG_FIRST_DER_COUNT,
+                    'minCount': SETTING.REG_FIRST_DER_COUNT,
+                    'ignoreUndefined': true 
+                });
+                if (o == undefined)
+                    data[k].studies.regression[i] = undefined;
+                else {
+                    var angle = Math.atan(o.m * SCALE.Y.PERC_CHANGE / SCALE.X) * 180 / Math.PI;
+                    data[k].studies.regression[i] = {
+                        'm': o.m,
+                        'b': o.b,
+                        'angle': angle
+                    };
+
+                    // preserveUndefined flag is not required in max & min, as below is executed only for valid angle/secondDerivative[i]
+                    data[k].limits.maxSlopeAngle = [data[k].limits.maxSlopeAngle, angle].max({
+                        'includeZero': true
+                    });
+                    data[k].limits.minSlopeAngle = [data[k].limits.minSlopeAngle, angle].min({
+                        'includeZero': true
+                    });
+                }
+            }
+
+            if (data[k].studies.secondDerivative == undefined)
+                data[k].studies.secondDerivative = [];
+            for (var i = data[k].studies.secondDerivative.length; i < data[k].range.length; i++) {
+                var o = Slope({
+                    'Y': data[k].studies.regression.map(function (o) {
+                        return o == undefined ? undefined : o.angle;
+                    }),
+                    'endPos': i,
+                    'countToConsider': SETTING.REG_SECOND_DER_COUNT,
+                    'minCount': SETTING.REG_SECOND_DER_COUNT,
+                    'ignoreUndefined': true 
+                });
+                if (o == undefined)
+                    data[k].studies.secondDerivative[i] = undefined;
+                else {
+                    var angle = Math.atan(o.m * SCALE.Y.ANGLE / SCALE.X) * 180 / Math.PI;
+                    data[k].studies.secondDerivative[i] = {
+                        'm': o.m,
+                        'b': o.b,
+                        'angle': angle
+                    };
+
+                    // preserveUndefined flag is not required in max & min, as below is executed only for valid angle/secondDerivative[i]
+                    data[k].limits.maxDerivativeAngle = [data[k].limits.maxDerivativeAngle, angle].max({
+                        'includeZero': true
+                    });
+                    data[k].limits.minDerivativeAngle = [data[k].limits.minDerivativeAngle, angle].min({
+                        'includeZero': true
+                    });
+                }
+            }
+        };
+
+        var totalRange = 0;
+        var deferCalculateRange;
+        CalculateRange = function() {
+            try {
+                var asOf = new Date();
+                for (var k = 0; k < data.length; k++) {
+                    var range = {
+                        'asOf': asOf
+                    };
+                    var isAvailable = false;
+                    while (data[k].LTP.length > 0) {
+                        var LTP = data[k].LTP.shift();
+
+                        range.openPrice = range.openPrice == undefined ? LTP : range.openPrice;
+                        range.highPrice = range.highPrice == undefined || LTP > range.highPrice ? LTP : range.highPrice;
+                        range.lowPrice = range.lowPrice == undefined || LTP < range.lowPrice ? LTP : range.lowPrice;
+                        range.closePrice = LTP;
+
+                        isAvailable = true;
+                    }
+                    if (isAvailable) {
+                        data[k].range[totalRange] = range;
+                        // If here, then range is not undefined (i.e. valid OHLC)
+                        data[k].limits.openPrice = data[k].limits.openPrice == undefined ? range.openPrice : data[k].limits.openPrice;
+                        // No parameters are passed to max & min as zero is not being considered
+                        data[k].limits.highPrice = [data[k].limits.highPrice, range.highPrice].max();
+                        data[k].limits.lowPrice = [data[k].limits.lowPrice, range.lowPrice].min();
+                        data[k].limits.closePrice = range.closePrice;
+                    }
+                    else
+                        data[k].range[totalRange] = undefined;
+                        
+                    CalculateStudies(k);
+                }
+
+                EvaluateScrips();
+                UpdateLayout();
+            }
+            catch (e) {
+                console.error('CalculateRange', e);
+            }
+            finally {
+                totalRange++;
+            }
+        };
+
+        var deferCheckIfOpen;
+        var state = STATE.CLOSE;
+        CheckIfOpen = function() {
+            $.ajax({
+                url: 'check-market-open.php'.URL(),
+                type: 'POST',
+                success: function(result) {
+                    if (result.error != undefined) {
+                        console.error('CheckIfOpen', result.error);
+                        deferCheckIfOpen = setTimeout(CheckIfOpen, SETTING.CHECK_OPEN_RETRY_INTERVAL);
+                        return;
+                    }
+
+                    if (result.state != 0)
+                        deferCheckIfOpen = setTimeout(CheckIfOpen, SETTING.CHECK_OPEN_RETRY_INTERVAL);
+                    else {
+                        // Market is now open, LTP "changes" from Google can now be considered
+                        state = STATE.OPEN;
+
+                        // 25-04-2016 - scrip-highlights now only focuses on prev. close price, which is available from yesterday's data also
+                        // So, no need to wait for today's data to be available. Hence, changed CHECK_START_STATE_INIT_TIMEOUT to CHECK_START_STATE_INTERVAL
+                        deferGetStartState = setTimeout(GetStartState, SETTING.CHECK_START_STATE_INTERVAL);
+                        deferCalculateRange = setInterval(CalculateRange, SETTING.STUDIES_CALC_INTERVAL);
+
+                        setTimeout(function() {
+                            evaluateScrips = true;
+                            setTimeout(function() {
+                                evaluateScrips = false;
+                            }, evaluateScripsEndTime.getTime() - new Date().getTime());
+                        }, evaluateScripsStartTime.getTime() - new Date().getTime());
+
+                        setTimeout(function() {
+                            state = STATE.CLOSE;
+                            clearInterval(deferCalculateRange);
+                        }, marketCloseTime.getTime() - new Date().getTime());
+                    }
+                },
+                error: function(HttpRequest, textStatus, errorThrown) {
+                    console.error('CheckIfOpen', HttpRequest, textStatus, errorThrown);
+                    deferCheckIfOpen = setTimeout(CheckIfOpen, SETTING.CHECK_OPEN_RETRY_INTERVAL);
+                }
+            });
+        };
+
+        SortScrips = function(sortCondition) {
+            var tr = $("#quote_container > tr").get();
+            tr.sort(function(a, b) {
+                try {
+                    var a = parseInt(a.id.split('_')[1]);
+                    var b = parseInt(b.id.split('_')[1]);
+
+                    switch (sortCondition) {
+                        case SORT.SYMBOL_NAME:
+                            return data[a].securitySymbol.localeCompare(data[b].securitySymbol);
+
+                        case SORT.LTP_CHANGE:
+                            var a = data[a].limits.previousClosePrice == undefined || data[a].limits.LTP == undefined ? 0 : Math.abs((data[a].limits.LTP - data[a].limits.previousClosePrice) / data[a].limits.previousClosePrice);
+                            var b = data[b].limits.previousClosePrice == undefined || data[b].limits.LTP == undefined ? 0 : Math.abs((data[b].limits.LTP - data[b].limits.previousClosePrice) / data[b].limits.previousClosePrice);
+                            return b - a;
+
+                        case SORT.C2O_CHANGE:
+                            var a = data[a].KPI.c2o == undefined ? 0 : Math.abs(data[a].KPI.c2o);
+                            var b = data[b].KPI.c2o == undefined ? 0 : Math.abs(data[b].KPI.c2o);
+                            return b - a;
+                            
+                        case SORT.H2L_CHANGE:
+                            var a = data[a].KPI.h2l == undefined ? 0 : Math.abs(data[a].KPI.h2l);
+                            var b = data[b].KPI.h2l == undefined ? 0 : Math.abs(data[b].KPI.h2l);
+                            return b - a;
+
+                        case SORT.SLOPE_ANGLE:
+                            var a = data[a].studies.regression != undefined && data[a].studies.regression[data[a].studies.regression.length - 1] != undefined ? Math.abs(data[a].studies.regression[data[a].studies.regression.length - 1].angle) : 0;
+                            var b = data[b].studies.regression != undefined && data[b].studies.regression[data[b].studies.regression.length - 1] != undefined ? Math.abs(data[b].studies.regression[data[b].studies.regression.length - 1].angle) : 0;  
+                            return b - a;
+                            
+                        case SORT.DERIVATIVE_ANGLE:
+                            var a = data[a].studies.secondDerivative != undefined && data[a].studies.secondDerivative[data[a].studies.secondDerivative.length - 1] != undefined ? Math.abs(data[a].studies.secondDerivative[data[a].studies.secondDerivative.length - 1].angle) : Number.MAX_SAFE_INTEGER;
+                            var b = data[b].studies.secondDerivative != undefined && data[b].studies.secondDerivative[data[b].studies.secondDerivative.length - 1] != undefined ? Math.abs(data[b].studies.secondDerivative[data[b].studies.secondDerivative.length - 1].angle) : Number.MAX_SAFE_INTEGER;  
+                            return a - b;
+                    }
+                }
+                catch (e) {
+                    return 0;
+                }
+            });
+            for (var i = 0; i < tr.length; i++)
+                tr[i].parentNode.appendChild(tr[i]);
+        };
+
+        var google;
+        BeginGoogle = function() {
+            // URL is subject to browser & OS
+            google = window.open('https://www.google.com/intl/en/about/#SAFE', 'WND-GOOGLE-HOME');
+        };
+
+        var religare;
+        BeginReligare = function() {
+            window.open('https://secure.religareonline.com/Login.aspx?rdrURL=https%3A//secure.religareonline.com/OrderBook.aspx%3Fassettype%3DEquity', 'WND-RELIGARE-ORDER');
+        };
+
+        DoSomething = function() {
+            try {
+                $.getJSON('data.json', function(data) {
+                    window.data = data;
+                    for (var k = 0; k < data.length; k++) {
+                        data[k].k = k;
+                        data[k].LTP = [];
+                        data[k].range = [];
+                        data[k].percChange = []; // w.r.t previousClosePrice
+                        data[k].studies = {};
+                        data[k].limits = {};
+                        // 04-04-2016 - Added support for recording all LTP changes
+                        // Two arrays instead of one main to reduce size
+                        data[k].priceChanges = {
+                            'LTP': [],
+                            'ts': []
+                        };
+                        // 01-05-2016 - Store KPI instead of having to calculate again for sorting
+                        data[k].KPI = {};
+
+                        // add k to dataPendingStartState; processing will start only later (once CheckIfOpen passes)
+                        dataPendingStartState.push(k);
+                    }
+                    // Set-up the initial table layout
+                    UpdateLayout();
+                    // In case, execution time post marketSpeculativeOpenTime, immediately executed (setTimeout doesn't recognize -ve times)
+                    // dataPendingStartState is completely populated before any check for open market is conducted
+                    deferCheckIfOpen = setTimeout(CheckIfOpen, marketSpeculativeOpenTime.getTime() - new Date().getTime());
+                });
+            }
+            catch (e) {
+                // In the unlikely event that jquery is not loaded before this function is executed
+                setTimeout(DoSomething, SETTING.DO_SOMETHING_RETRY_INTERVAL);
+            }
+        };
+
+        window.addEventListener('message', ProcessMessage, false);
+
+        window.onbeforeunload = function() {
+            return 'You might have open positions.';
+        };
+
+        DoSomething();
+    </script>
+
+    <div id="header" style="padding-right: 8px"></div>
+
+    <div style="position: absolute; display: block; right: 0px;">
+        <table style="padding-right: 8px;">
+            <tr>
+                <td class="no-border" style="text-align: right">
+                    <a href="javascript:BeginGoogle()">
+                        Google:&nbsp;
+                    </a>
+                </td>
+                <td id="state_google" class="no-border" style="color: #D14836;">
+                    OFF
+                </td>
+            </tr>
+            <tr>
+                <td class="no-border" style="text-align: right">
+                    <a href="javascript:BeginReligare()">
+                        Religare:&nbsp;
+                    </a>
+                </td>
+                <td id="state_religare" class="no-border" style="color: #D14836;">
+                    OFF
+                </td>
+            </tr>
+        </table>
+    </div>
+
+    <div style="float: left; padding-right: 8px">
+        <table style="border-color: black; border-top: 1px solid #C8EFEA; border-left: 1px solid #C8EFEA; margin: 0px; padding: 0px; border-collapse: collapse">
+            <caption id="sort_parameter" style="display: table-caption; text-align: right; padding-bottom: 2px">
+            </caption>
+            <thead>
+                <tr>
+                    <th style="width: 90px;">Scrip</th>
+                    <th style="width: 55px;">LTP<br />%Chg</th>
+                    <th style="width: 775px;">Chart<sup>1</sup></th>
+                    <th style="width: 90px;">Addtl. KPI<sup>2</sup></th>
+                </tr>
+            </thead>
+            <tbody id="quote_container" style="text-align: left">
+            </tbody>
+            <caption style="caption-side: bottom; text-align: left">
+                <sup>1</sup>&nbsp;<img src="buy.png" id="buy" alt="buy" style="vertical-align: middle"> &amp; <img src="sell.png" id="sell" alt="sell" style="vertical-align: middle"> indicate buy &amp; sell trades resp.
+            </caption>
+            <caption style="caption-side: bottom; text-align: left">
+                <sup>2</sup>&nbsp;KPIs are updated only on computation of a range
+            </caption>
+        </table>
+    </div>
+
+    <div id="metrics" style="position: fixed; left: 15px; top: 10px; width: 100px; padding: 2px; border: 1px solid rgb(200, 239, 234); color: rgb(28, 53, 93); background-color: rgb(248, 248, 228); display: none;">
+    </div>
+
+    <svg id="svg" style="position: absolute; top: 0; left: 0;" height="10" width="10">
+        <line id="line_1" x1="10" y1="0" x2="200" y2="200" style="stroke: rgb(0, 102, 221); display: none;" />
+        <line id="line_2" x1="20" y1="0" x2="200" y2="200" style="stroke: rgb(192, 128, 156); display: none;" />
+        
+        <text id="text_1" x="0" y="0" style="font-family: Verdana; font-size: 11px; transform: translate(-6px, 4.5px); fill-opacity: 1; fill: rgb(0, 0, 0); display: none;">❌</text>
+        <text id="text_2" x="0" y="0" style="font-family: Verdana; font-size: 11px; transform: translate(-6px, 4.5px); fill-opacity: 1; fill: rgb(0, 0, 0); display: none;">❌</text>
+        <text id="text_3" x="0" y="0" style="font-family: Verdana; font-size: 11px; transform: translate(-6px, 4.5px); fill-opacity: 1; fill: rgb(0, 0, 0); display: none;">❌</text>
+    </svg>
+
+    <script>
+        $('#svg').bind('mouseleave', function(e) {
+            $('#svg > line').hide();
+            $('#svg > text').hide();
+            $('#metrics').hide();
+            $(this).hide();
+        });
+
+        $('#svg').bind('mousemove', function(e) {
+            var k = $(this).attr('k');
+            var i = Math.floor((e.pageX - $(this).offset().left) / SCALE.X);
+            DisplayMetrics(k, i);
+        });
+
+        var html = 'Sort by ';
+        for (var i = 0; i < sortParameter.length; i++) {
+            html += (i != 0 ? ',&nbsp;' : '') + '<a class="sort" onclick="SortScrips(' + sortParameter[i].value + ')">' + sortParameter[i].text + '</a>';
+        }
+        $('#sort_parameter').html(html);
+    </script>
+</body>
+
+</html>

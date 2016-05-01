@@ -1,0 +1,17 @@
+x1 = 4 * (i - 30) + 2.5; 
+y1 = 50 * 100 * (data[k].limits.maxPercChange - (m * (i - 30) + b))); 
+
+x2 = 4 * (i + 15) + 2.5; 
+y2 = 50 * 100 * (data[k].limits.maxPercChange - (m * (i + 15) + b))); 
+
+dy = 50 * 100 * (data[k].limits.maxPercChange - (m * (i + 15) + b))) - 50 * 100 * (data[k].limits.maxPercChange - (m * (i - 30) + b)))
+   = 50 * 100 * (m * (i - 30) + b)) - 50 * 100 * (m * (i + 15) + b))
+   = 50 * 100 * m * (i - 30) - 50 * 100 * m * (i + 15)
+   = 50 * 100 * m * ((i - 30) - (i + 15));
+
+x2 - x1 = 4 * (i + 15) - 4 * (i - 30);
+        = -4 * ((i - 30) - (i + 15));
+
+dy / dx = 50 * 100 * m  / -4 
+        = -m * SCALE.Y / SCALE.X
+-dy / dx (because 0,0 is on top left instead of bottom left)

@@ -1,6 +1,9 @@
 ﻿SETTING.MAX_PRICE_ADJUSTMENT = 0.0015;
 SETTING.MIN_PRICE_ADJUSTMENT = 0.0005;
 
+var disableLayoutUpdated = false,
+    trueUpdateLayout = UpdateLayout.toString();
+
 var archive = [];
 
 var orders = [];
@@ -103,7 +106,25 @@ SquareOff = function () {
 };
 
 StartSimulation = function () {
-    var processingDate = $('#dates').val().replace('/~Antikythera/Sandbox/History/archive.', '').replace('.json', '').replace(/\./g, '-');
+    // 28-04-2016 - Once simulation has started, disallow change of source as it can lead to unpredictable results
+    // As a result, the only way to change source is to refresh main dashboard & initiate backtest
+    $('#check_on_alternate').attr('disabled', true);
+    $('#inner_container').children().attr('disabled', true);
+    
+    $('<div id="polled_time">')
+        .css({
+            'position': 'fixed',
+            'right': '10px',
+            'top': '10px',
+            'padding': '4px',
+            'background-color': '#2D2D30',
+            'color': 'white',
+            'font-size': '22px'
+        })
+        .text('09:16')
+        .appendTo('body');
+    
+    var processingDate = $('#dates').val().split('archive.')[1].split('.json')[0].replace(/\./g, '-');
 
     // 1. Reinitialize user-defined date objects to reflect processingDate
     for (var name in this) {
@@ -115,8 +136,8 @@ StartSimulation = function () {
     eval('EvaluateScrips = ' + EvaluateScrips.toString().replace(/new Date\(\)/g, 'new Date(polledTime.toISOString())'));
 
     // 10-08-2015 - Save the new funds value and use the same for simulation
-    document.cookie = 'sampleFunds=' + document.getElementById('sampleFunds').value + '; path=/; expires=Thu, 31 Dec 2099 12:00:00 UTC';
-    UpdateAvailableFunds(Number(document.getElementById('sampleFunds').value));
+    document.cookie = 'sampleFunds=' + $('#sample_funds').val() + '; path=/; expires=Thu, 31 Dec 2099 12:00:00 UTC';
+    UpdateAvailableFunds(Number($('#sample_funds').val()));
 
     log.processingDate.innerHTML = '<a href="javascript:GotoNext(true, \'' + $('#dates option:selected').text() + '\')">' + $('#dates option:selected').text() + '</a>';
     log.availableFunds.innerHTML = '₹' + availableFunds.toComma(2);
@@ -125,12 +146,19 @@ StartSimulation = function () {
     var rangeStartTime = new Date(processingDate + 'T03:46:00.000Z');
     var rangeIndex = 0;
 
+    // 28-04-2016 - Originally used in slow mo; redundant at the moment (cookie: slowMoEnabled)
     RepeatSimulation = function () {
         document.getElementById('clickToContinue').removeEventListener('click', RepeatSimulation);
         ProcessSimulation();
     };
 
     ProcessSimulation = function () {
+        // 28-04-2016 - UpdateLayout is time-expensive; hence, providing option to disable it
+        if (disableLayoutUpdated) {
+            eval('UpdateLayout = ' + ($('#disable_layout').is(':checked') ? 'function () {};' : trueUpdateLayout));
+            disableLayoutUpdated = false;
+        }
+        
         polledTime.setTime(rangeStartTime.getTime() + rangeIndex * 2 * 60 * 1000);
 
         var changed = false;
@@ -172,11 +200,15 @@ StartSimulation = function () {
         CalculateRange();
 
         if (changed) {
+            $('#polled_time').text(('0' + polledTime.getHours()).slice(-2) + ':' + ('0' + polledTime.getMinutes()).slice(-2));
+            
             rangeIndex++;
-            if (document.getElementById('checkOnSlowMo').checked)
-                document.getElementById('clickToContinue').addEventListener('click', RepeatSimulation);
-            else
-                setTimeout(ProcessSimulation, 0);
+            setTimeout(ProcessSimulation, 0);
+// Below is used with slow mo; currently disabled (cookie: slowMoEnabled)
+//            if (document.getElementById('checkOnSlowMo').checked)
+//                document.getElementById('clickToContinue').addEventListener('click', RepeatSimulation);
+//            else
+//                setTimeout(ProcessSimulation, 0);
         }
         else {
             var grossValue = 0;
@@ -255,83 +287,126 @@ DoSomething = function () {
     // Clear existing intervals & pre-initialization steps
     if (window.deferCheckIfOpen != undefined)
         clearTimeout(deferCheckIfOpen);
+    // 28-04-2016 - clearTimeout doesn't seem to clear the check timeout; so remove the function itself
+    window.CheckIfOpen = function () {};
+    
     if (window.deferCalculateRange != undefined)
         clearInterval(deferCalculateRange);
     dataPendingStartState = [];
+    // 28-04-2016 - No need to prompt the user for backtest
+    window.onbeforeunload = null;
 
-    var div = document.createElement('div');
-    div.style.position = 'fixed';
-    div.style.left = '10px';
-    div.style.bottom = '10px';
-    document.body.appendChild(div);
+    // 28-04-2016 - Replaced regular JS with jQuery
+    $('<div>')
+        .css({
+            'position': 'fixed',
+            'right': '10px',
+            'bottom': '10px',
+            'text-align': 'right'
+        })
+        .append(
+            'Use alternate source?&nbsp;',
+            $('<input id="check_on_alternate">')
+                .attr({
+                    'type': 'checkbox',
+                    // 28-04-2016 - Prevent toggling of source in alternate techniques; source should be set only in main dashboard
+                    // Toggled source takes effect (or will lead to correct results) only after refresh; alternate techniques can't be refreshed
+                    // Also, prevent toggling of source if nextDateDue is defined i.e. we are in the middle of an active simulation
+                    'disabled': window.technique != undefined || window.nextDateDue != undefined
+                })
+                .prop('checked', document.cookie.indexOf('runForAlternateDates=') != -1 && document.cookie.split('runForAlternateDates=')[1].split(';')[0] == 'yes')
+                .bind('change', function () {
+                    document.cookie = 'runForAlternateDates=' + ($(this).is(':checked') ? 'yes' : 'no') + '; path=/; expires=Thu, 31 Dec 2099 12:00:00 UTC';
+                    $('#inner_container').children().attr('disabled', true);
+                    console.info('Source changed; start over for changes to take effect');
+                }),
+            $('<br>'),
+            $('<input>')
+                .attr({
+                    'type': 'button',
+                    'value': '🔃'
+                })
+                .bind('click', function () {
+                    eval('(' + trueUpdateLayout + ')()');              
+                }),
+            '&nbsp;Turn off canvas update?&nbsp;',
+            $('<input id="disable_layout">')
+                .attr({
+                    'type': 'checkbox'
+                })
+                .prop('checked', document.cookie.indexOf('disableUpdateLayout=') != -1 && document.cookie.split('disableUpdateLayout=')[1].split(';')[0] == 'yes')
+                .bind('change', function () {
+                    document.cookie = 'disableUpdateLayout=' + ($(this).is(':checked') ? 'yes' : 'no') + '; path=/; expires=Thu, 31 Dec 2099 12:00:00 UTC';
+                    disableLayoutUpdated = true;
+                })
+        )
+        .appendTo('body');
+    
+    $('<div>')
+        .css({
+            'position': 'fixed',
+            'left': '10px',
+            'bottom': '10px'
+        })
+        .append(
+            $('<select id="scripts">')
+                .css({
+                    'margin': '5px'
+                }),
+            $('<input>')
+                .attr({
+                    'type': 'button',
+                    'value': '►'
+                })
+                .bind('click', function () {
+                    PrepareAlternateWindow(window.open(), {
+                        'text': $('#scripts option:selected').text(),
+                        'val': $('#scripts').val()
+                    });                
+                }),
+            $('<br>'),
+            $('<img>')
+                .attr({
+                    'src': 'or.png'
+                }),
+            $('<br>'),
+            $('<span id="inner_container">')
+                .append(
+                    $('<select id="dates">')
+                        .css({
+                            'margin': '5px'
+                        }),
+                    $('<input id="sample_funds">')
+                        .css({
+                            'margin-right': '5px',
+                            'width': '90px'
+                        })
+                        .val(document.cookie.indexOf('sampleFunds=') != -1 ? document.cookie.split('sampleFunds=')[1].split(';')[0] : ''),
+                    $('<input>')
+                        .attr({
+                            'type': 'button',
+                            'value': '►'
+                        })
+                        .bind('click', function () {
+                            InitializeSimulation();
+                        })
+                )
+        )
+        .appendTo('body');
 
-    var selectScripts = document.createElement('select');
-    selectScripts.id = 'scripts';
-    selectScripts.style.margin = '5px';
-    div.appendChild(selectScripts);
+    if ($('#disable_layout').is(':checked'))
+        disableLayoutUpdated = true;
+        // When ProcessSimulation is run, UpdateLayout will be altered
+        // disableLayoutUpdated is false only in ProcessSimulation
+
     $.getJSON('./Sandbox/available-alternate-scripts.php', function (result) {
         $.each(result, function () {
             $('#scripts').append($("<option />").val(this.relativeURL).text(this.alternateScript));
         });
     });
 
-    var inputScripts = document.createElement('input');
-    inputScripts.type = 'button';
-    inputScripts.value = '>';
-    inputScripts.addEventListener('click', function (e) {
-        var handle = window.open();
-        PrepareAlternateWindow(handle, {
-            'text': $('#scripts option:selected').text(),
-            'val': $('#scripts').val()
-        });
-    });
-    div.appendChild(inputScripts);
-
-    div.appendChild(document.createElement('br'));
-
-    var selectDates = document.createElement('select');
-    selectDates.id = 'dates';
-    selectDates.style.margin = '5px';
-    div.appendChild(selectDates);
-
-    var inputFunds = document.createElement('input');
-    inputFunds.type = 'text';
-    inputFunds.id = 'sampleFunds';
-    inputFunds.style.marginRight = '5px';
-    inputFunds.style.width = '90px';
-    if (document.cookie.indexOf('sampleFunds=') != -1)
-        inputFunds.value = document.cookie.split('sampleFunds=')[1].split(';')[0];
-    div.appendChild(inputFunds);
-
-    var inputDates = document.createElement('input');
-    inputDates.type = 'button';
-    inputDates.value = '>';
-    inputDates.addEventListener('click', function (e) {
-        InitializeSimulation();
-    });
-    div.appendChild(inputDates);
-
-    div.appendChild(document.createElement('br'));
-
-    var inputCheck = document.createElement('input');
-    inputCheck.type = 'checkbox';
-    inputCheck.id = 'checkOnSlowMo';
-    if (document.cookie.indexOf('slowMoEnabled=') != -1)
-        inputCheck.checked = document.cookie.split('slowMoEnabled=')[1].split(';')[0] == 'yes';
-    inputCheck.addEventListener('change', function (e) {
-        document.cookie = 'slowMoEnabled=' + (inputCheck.checked ? 'yes' : 'no') + '; path=/; expires=Thu, 31 Dec 2099 12:00:00 UTC';
-    });
-    div.appendChild(inputCheck);
-
-    var inputNext = document.createElement('input');
-    inputNext.type = 'button';
-    inputNext.id = 'clickToContinue';
-    inputNext.value = '>>';
-    // Event handler for inputNext is added when and where necessary
-    div.appendChild(inputNext);
-
     // Populating of dates is done asynchronously
-    $.getJSON('./Sandbox/available-dates.php', function (result) {
+    $.getJSON('./Sandbox/available-dates.php' + ($('#check_on_alternate').is(':checked') ? '?source=alternate' : ''), function (result) {
         result.sort(function (a, b) {
             return a.relativeURL < b.relativeURL ? 1 : (a.relativeURL > b.relativeURL ? -1 : 0);
         });
@@ -346,7 +421,7 @@ DoSomething = function () {
 
         if (window.nextDateDue != undefined && window.nextDateDue != '-')
             InitializeSimulation();
-    });
+    });    
 };
 
 DoSomething();

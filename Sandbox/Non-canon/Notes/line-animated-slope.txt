@@ -51,15 +51,14 @@ for (var k = 0; k < data.length; k++) {
       data[k].priceChanges[j].m = m;
       data[k].priceChanges[j].b = b;
 
-      var y1 = m * data[k].priceChanges[j - SETTING.REQD_SLOPE_CALC_VAL + 1].ts + b;
-      var y2 = m * data[k].priceChanges[j].ts + b;      
-      data[k].priceChanges[j].angle = Math.atan((y1 - y2) / (data[k].priceChanges[j - SETTING.REQD_SLOPE_CALC_VAL + 1].ts - data[k].priceChanges[j].ts)) * 180 / Math.PI;
-
+      data[k].priceChanges[j].angle = Math.atan(m * 50 * 100 / (1 / 20000)) * 180 / Math.PI;
+/*
       var Y1 = Y(k, y1);
       var Y2 = Y(k, y2);
       var X1 = X(k, data[k].priceChanges[j - SETTING.REQD_SLOPE_CALC_VAL + 1].ts);
       var X2 = X(k, data[k].priceChanges[j].ts);   
       data[k].priceChanges[j].angle2 = Math.atan((Y1 - Y2) / (X1 - X2)) * 180 / Math.PI;   
+*/
     } 
   }
   console.log(k, new Date());

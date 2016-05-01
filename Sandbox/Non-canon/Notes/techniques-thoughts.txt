@@ -1,0 +1,3 @@
+1. Try ema or sma for a small period & then calculate the derivatives
+1.1. Adjust slope period for ema (so ema = 3; slope = 26 -> slope = 26 -3 = 23
+2. Ensure before making a transaction whether a loss is invoked or not

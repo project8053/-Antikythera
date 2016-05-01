@@ -31,7 +31,7 @@ $.getJSON('https://localhost.daplie.com/~Antikythera/Sandbox/Non-canon/History%2
         data[k].range[index] = output[k].range[i];
       }
     }
-  console.log(data.length);
+  console.info('No. of scrips is ' + data.length, new Date());
   });
 
 // 3. Calculate multiple limits
@@ -40,7 +40,7 @@ var maxRange = 0;
 for (var k = 0; k < data.length; k++)
   if (data[k].range.length > maxRange)
     maxRange = data[k].range.length;
-console.log(maxRange, new Date().getTime());
+console.info('Max. range is ' + maxRange, new Date());
 
 for (var k = 0; k < data.length; k++) {
   data[k].percChange = [];
@@ -55,7 +55,7 @@ for (var k = 0; k < data.length; k++) {
     ];
   }
 }
-console.log('percChange', new Date().getTime());
+console.info('Perc. change calculated', new Date());
 
 for (var k = 0; k < data.length; k++) {
   var maxPercChange = Number.MIN_SAFE_INTEGER, minPercChange = Number.MAX_SAFE_INTEGER;
@@ -69,17 +69,57 @@ for (var k = 0; k < data.length; k++) {
   data[k].limits.maxPercChange = maxPercChange;
   data[k].limits.minPercChange = minPercChange;
 }
-console.log('limits', new Date().getTime());
+console.info('Limits defined', new Date());
 
 // 4. Calculate slope
 
 var SETTING = {
-  'REQD_SLOPE_CALC_VAL': 30
+  'REG_FIRST_DER_COUNT': 29,
+  'REG_SECOND_DER_COUNT': 5
 };
 
 var SCALE = {
   'X': 4,
   'Y': 50 * 100
+};
+
+var PRICE = {
+  'O': 0,
+  'H': 1,
+  'L': 2,
+  'C': 3
+};
+
+Array.prototype.process = function (a, b, c) {
+  if (typeof a === 'function')
+    return this.map(a).slice(b > 0 ? b : 0, c);
+  else 
+    return this.slice(a > 0 ? a : 0, b);
+};
+
+Slope = function (Y, X) {
+  var x = 0, xx = 0, y = 0, xy = 0, n = 0;
+  for (var i = 0; i < Y.length; i++) {
+    if (Y[i] == undefined)
+      continue;
+    var z = X == undefined ? i : X[i];
+    x += z;
+    xx += z * z;
+    y += Y[i];
+    xy += z * Y[i];
+    n++;
+  }
+  
+  if (n < 2)
+    return;
+  
+  var m = ((n * xy) - (x * y)) / ((n * xx) - (x * x));
+  var b = (y - m * x) / n;
+  
+  return { 
+    'm': m,
+    'b': b
+  };
 };
 
 for (var k = 0; k < data.length; k++) {
@@ -90,51 +130,61 @@ for (var k = 0; k < data.length; k++) {
   
   // min. reqd for regression = 2; so min. possible i = 1
   for (var i = 1; i < data[k].percChange.length; i++) {
+    var o = Slope(data[k].percChange.process(function (o) { return o[PRICE.C]; }, (i + 1) - SETTING.REG_FIRST_DER_COUNT, i + 1));
+    if (o == undefined)
+      continue;
 
-    for (var p = 0; p < 4; p++) {
-      var x = 0, xx = 0, y = 0, xy = 0, n = 0;
-      for (var j = i; j > i - SETTING.REQD_SLOPE_CALC_VAL && j >= 0; j--) {
-        if (data[k].percChange[j] == undefined)
-          continue;
-        x += j;
-        xx += j * j;
-        y += data[k].percChange[j][p];
-        xy += j * data[k].percChange[j][p];
-        n++;
-      }
+    var angle = Math.atan(o.m * SCALE.Y / SCALE.X) * 180 / Math.PI;
 
-      if (n < 2)
-        break;
-
-      if (data[k].regression[i] == undefined)
-        data[k].regression[i] = [];
-
-      var m = ((n * xy) - (x * y)) / ((n * xx) - (x * x));
-      var b = (y - m * x) / n;
-      var angle = Math.atan(m * SCALE.Y / SCALE.X) * 180 / Math.PI;
-
-      data[k].regression[i][p] = {
-        'm': m,
-        'b': b,
-        'angle': angle
-      };      
+    data[k].regression[i] = {
+      'm': o.m,
+      'b': o.b,
+      'angle': angle
+    };      
       
-      data[k].limits.maxSlopeAngle = angle > data[k].limits.maxSlopeAngle ? angle : data[k].limits.maxSlopeAngle;
-      data[k].limits.minSlopeAngle = angle < data[k].limits.minSlopeAngle ? angle : data[k].limits.minSlopeAngle;
-    }
+    data[k].limits.maxSlopeAngle = angle > data[k].limits.maxSlopeAngle ? angle : data[k].limits.maxSlopeAngle;
+    data[k].limits.minSlopeAngle = angle < data[k].limits.minSlopeAngle ? angle : data[k].limits.minSlopeAngle;    
   }
   console.log(k);
 }
+console.info('First derivative calculated', new Date());
+
+for (var k = 0; k < data.length; k++) {
+  data[k].secondDerivative = [];
+
+  data[k].limits.maxDerivativeAngle = 0;
+  data[k].limits.minDerivativeAngle = 0;
+  
+  // min. reqd for regression = 2; so min. possible i = 2 (because o.regression[0] = undefined)
+  for (var i = 2; i < data[k].regression.length; i++) {
+    var o = Slope(data[k].regression.process(function (o) { return o.angle; }, (i + 1) - SETTING.REG_SECOND_DER_COUNT, i + 1));
+    if (o == undefined)
+      continue;
+
+    var angle = Math.atan(o.m * 1 / SCALE.X) * 180 / Math.PI;
+
+    data[k].secondDerivative[i] = {
+      'm': o.m,
+      'b': o.b,
+      'angle': angle
+    };      
+      
+    data[k].limits.maxDerivativeAngle = angle > data[k].limits.maxDerivativeAngle ? angle : data[k].limits.maxDerivativeAngle;
+    data[k].limits.minDerivativeAngle = angle < data[k].limits.minDerivativeAngle ? angle : data[k].limits.minDerivativeAngle;    
+  }
+  console.log(k);
+}
+console.info('Second derivative calculated', new Date());
 
 // 5. Prepare GUI
 
 var table = document.createElement('table');
 document.body.appendChild(table);
 for (var k = 0; k < data.length; k++) {
-  var row = [ table.insertRow(2 * k), table.insertRow(2 * k + 1) ];
+  var row = [ table.insertRow(3 * k), table.insertRow(3 * k + 1), table.insertRow(3 * k + 2) ];
   var symbol = row[0].insertCell(0);
   symbol.innerHTML = data[k].symbol;
-  symbol.setAttribute('rowspan', '2');
+  symbol.setAttribute('rowspan', '3');
   
   if (data[k].range.length == 0)
     continue;
@@ -144,8 +194,10 @@ for (var k = 0; k < data.length; k++) {
   data[k].canvas[0].setAttribute('k', k);
   row[1].insertCell(0).appendChild(data[k].canvas[1] = document.createElement('canvas'));
   data[k].canvas[1].setAttribute('k', k);
+  row[2].insertCell(0).appendChild(data[k].canvas[2] = document.createElement('canvas'));
+  data[k].canvas[2].setAttribute('k', k);
 }
-console.log('table');
+console.info('table');
 
 for (var k = 0; k < data.length; k++) {
   if (data[k].range.length == 0)
@@ -185,27 +237,77 @@ for (var k = 0; k < data.length; k++) {
     }
   }  
 
+  var isStart;
+
   var slope = data[k].canvas[1];
   slope.width = maxRange * SCALE.X;   
   slope.height = Math.ceil(1 * (data[k].limits.maxSlopeAngle - data[k].limits.minSlopeAngle)) + 1;
 
   var context = slope.getContext('2d');
+  context.beginPath();
+
+  var yZero = Math.ceil(1 * (data[k].limits.maxSlopeAngle - 0)) + 0.5;
+  context.moveTo(SCALE.X * 1 + 2.5, yZero);
+  context.lineTo(SCALE.X * (data[k].regression.length - 1) + 2.5, yZero);
+  context.setLineDash([3, 2]);
+  context.strokeStyle = '#A9A9A9';
+  context.stroke();
+
+  context.beginPath();
+  context.setLineDash([0]);
+  context.strokeStyle = 'blue';
+  isStart = true;
   for (var i = 1; i < data[k].regression.length; i++) {
-    if (data[k].regression == undefined || data[k].regression[i][3].angle == 0)
+    if (data[k].regression == undefined || data[k].regression[i] == undefined || data[k].regression[i].angle == 0)
       continue;
     
-    context.beginPath();
-    context.strokeStyle = data[k].regression[i][3].angle < 0 ? 'red' : 'green';
-
     var x = SCALE.X * i + 2.5;
-    var yAngle = Math.ceil(1 * (data[k].limits.maxSlopeAngle - data[k].regression[i][3].angle));
-    var yZero = Math.ceil(1 * (data[k].limits.maxSlopeAngle - 0));
+    var yAngle = Math.ceil(1 * (data[k].limits.maxSlopeAngle - data[k].regression[i].angle));
 
-    context.moveTo(x, yAngle);
+    if (isStart) {
+      context.moveTo(x, yAngle);
 
-    context.lineTo(x, yZero);
-    context.stroke();
+      isStart = false;
+    }
+    else
+      context.lineTo(x, yAngle);
   }
+  context.stroke();
+
+  var second = data[k].canvas[2];
+  second.width = maxRange * SCALE.X;   
+  second.height = Math.ceil(1 * (data[k].limits.maxDerivativeAngle - data[k].limits.minDerivativeAngle)) + 1;
+
+  var context = second.getContext('2d');
+  context.beginPath();
+  
+  var yZero = Math.ceil(1 * (data[k].limits.maxDerivativeAngle - 0)) + 0.5;
+  context.moveTo(SCALE.X * 1 + 2.5, yZero);
+  context.lineTo(SCALE.X * (data[k].secondDerivative.length - 1) + 2.5, yZero);
+  context.setLineDash([3, 2]);
+  context.strokeStyle = '#A9A9A9';
+  context.stroke();
+
+  context.beginPath();
+  context.setLineDash([0]);
+  context.strokeStyle = 'blue';
+  isStart = true;
+  for (var i = 2; i < data[k].secondDerivative.length; i++) {
+    if (data[k].secondDerivative == undefined || data[k].secondDerivative[i] == undefined || data[k].secondDerivative[i].angle == 0)
+      continue;
+    
+    var x = SCALE.X * i + 2.5;
+    var yAngle = Math.ceil(1 * (data[k].limits.maxDerivativeAngle - data[k].secondDerivative[i].angle));
+
+    if (isStart) {
+      context.moveTo(x, yAngle);
+
+      isStart = false;
+    }
+    else
+      context.lineTo(x, yAngle);
+  }
+  context.stroke();
 }
 
 // 6. Prepare event
@@ -224,8 +326,8 @@ document.getElementById('svg').addEventListener('mousemove', function (e) {
       return;
   }
 
-  var m = data[k].regression[i][3].m;
-  var b = data[k].regression[i][3].b;
+  var m = data[k].regression[i].m;
+  var b = data[k].regression[i].b;
 
   document.getElementById('line').setAttribute('x1', SCALE.X * (i - 30) + 2.5); 
   document.getElementById('line').setAttribute('y1', Math.ceil(SCALE.Y * (data[k].limits.maxPercChange - (m * (i - 30) + b)))); 
